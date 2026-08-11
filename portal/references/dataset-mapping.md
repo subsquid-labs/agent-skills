@@ -1,6 +1,6 @@
 # Full Portal Chain Name Mapping
 
-Portal serves **234 datasets** (as of July 2026). This file maps common chain names to Portal dataset names. For the always-current list:
+Portal serves **200 datasets** (as of August 2026; 30 low-usage datasets were retired on August 5). This file maps common chain names to Portal dataset names. For the always-current list:
 
 ```bash
 curl -s https://portal.sqd.dev/datasets          # full catalog with real_time flags
@@ -9,7 +9,9 @@ curl -I https://portal.sqd.dev/datasets/{name}/metadata   # 200 = exists, 404 = 
 
 Or via MCP: `portal_list_networks` (search by name/alias/chain ID, filter by `vm` and `real_time_only`).
 
-## Real-Time Datasets (34)
+> **⚠️ 67 datasets retire on 2026-08-20 at 12:00 UTC** — mostly low-usage Substrate chains and small EVM networks. They are still queryable until then but must not be used for anything new. Full list in [Retiring on 2026-08-20](#retiring-on-2026-08-20) below; announcement: <https://docs.sqd.dev/announcements/dataset-retirements-august-2026>.
+
+## Real-Time Datasets (32)
 
 These datasets stream to the live chain head; everything else is finalized-historical only.
 
@@ -36,7 +38,6 @@ These datasets stream to the live chain head; everything else is finalized-histo
 | TAC | `tac-mainnet` | EVM |
 | Unichain | `unichain-mainnet` | EVM |
 | Zora | `zora-mainnet` | EVM |
-| ADI | `adi-mainnet` | EVM |
 | HyperEVM | `hyperliquid-mainnet` | EVM |
 | Hyperliquid Fills | `hyperliquid-fills` | HyperliquidFills |
 | Solana | `solana-mainnet` (alias: `solana-beta`) | Solana |
@@ -47,7 +48,6 @@ These datasets stream to the live chain head; everything else is finalized-histo
 | Arbitrum Sepolia | `arbitrum-sepolia` | EVM (testnet) |
 | Polygon Amoy | `polygon-amoy-testnet` | EVM (testnet) |
 | Monad Testnet | `monad-testnet` | EVM (testnet) |
-| ADI Testnet | `adi-testnet` | EVM (testnet) |
 | Alpen Testnet | `alpen-testnet` | EVM (testnet) |
 
 > **Real-time streaming is NOT supported for Substrate chains** — those are finalized-historical only.
@@ -71,42 +71,34 @@ These datasets stream to the live chain head; everything else is finalized-histo
 | Moonriver (EVM) | `moonriver-mainnet` |
 | Astar (EVM) | `astar-mainnet` |
 | Abstract | `abstract-mainnet` |
-| Immutable zkEVM | `immutable-zkevm-mainnet` |
 | Hedera (EVM mirror) | `hedera-mainnet` |
-| Neon EVM | `neon-mainnet` |
 | Etherlink | `etherlink-mainnet` |
 | Lukso | `lukso-mainnet` |
 | Core | `core-mainnet` |
 | X Layer | `xlayer-mainnet` |
 | zkLink Nova | `zklink-nova-mainnet` |
-| Superseed | `superseed-mainnet` |
 | Plume | `plume-mainnet` |
 | Katana | `katana-mainnet` |
 | Hemi | `hemi-mainnet` |
-| Merlin | `merlin-mainnet` |
 | BOB | `bob-mainnet` |
-| Cyber | `cyber-mainnet` |
-| Degen Chain | `degen-chain` |
-| DFK Chain | `dfk-chain` |
-| Dogechain | `dogechain-mainnet` |
-| Canto | `canto` |
 | Galxe Gravity | `galxe-gravity` |
 | B3 | `b3-mainnet` |
 | Beam | `beam-mainnet` |
-| MemeCore | `memecore-mainnet` |
 | Prom | `prom-mainnet` |
-| SKALE Nebula | `skale-nebula` |
 | Bittensor EVM | `bittensor-mainnet-evm` |
 | Peaq (EVM) | `peaq-mainnet` |
-| Shiden (EVM) | `shiden-mainnet` |
-| Aleph Zero EVM | `aleph-zero-evm-mainnet` |
 
 ### Removed from Portal (do NOT use)
 
 - ❌ `worldchain-mainnet` — no longer served
 - ❌ `fantom-mainnet` — no longer served
+- ❌ `ethereum-holesky` — retired 2026-08-05 (use `ethereum-sepolia` or `ethereum-hoodi`)
+- ❌ `adi-mainnet` / `adi-testnet` — no longer served
+- ❌ `memecore-mainnet` / `exosama` / `botanix-mainnet` — networks retired July 2026
 - ❌ `acala-substrate` — use `acala`
 - ❌ `subsocial` — use `subsocial-parachain`
+
+Thirty more low-usage datasets (mostly testnets and small parachains, e.g. `westend`, `rococo`, `dancebox`) were retired on 2026-08-05 — any slug not in the Complete Dataset List below is gone.
 
 ## Solana-VM (SVM) Datasets
 
@@ -130,26 +122,18 @@ All use `"type": "solana"` queries.
 | Moonbeam (Substrate) | `moonbeam-substrate` |
 | Moonriver (Substrate) | `moonriver-substrate` |
 | Astar (Substrate) | `astar-substrate` |
-| Acala | `acala` |
 | Hydration (HydraDX) | `hydradx` |
-| Bifrost | `bifrost-polkadot` / `bifrost-kusama` |
-| Phala | `phala` |
-| Interlay | `interlay` |
-| Centrifuge | `centrifuge` |
 | Vara | `vara` |
-| Avail | `avail` |
 | Bittensor | `bittensor` |
-| Frequency | `frequency` |
-| Polymesh | `polymesh` |
 | Zeitgeist | `zeitgeist` |
-| Subsocial | `subsocial-parachain` |
 | Enjin Matrix | `enjin-matrix` |
-| KILT | `kilt` |
 | Peaq (Substrate) | `peaq-mainnet-substrate` |
+
+> Many smaller parachains (Acala, Bifrost, Phala, Interlay, Centrifuge, Avail, Frequency, Polymesh, KILT, and others) **retire on 2026-08-20** — see the retirement list below before using any parachain not in this table.
 
 Many more parachains are available — search the full list below or use `portal_list_networks` with `vm: "substrate"`.
 
-> **Note:** Frontier EVM parachains (Moonbeam, Astar, Shiden, Peaq) have both EVM and Substrate datasets. Use the `-substrate` suffix with `"type": "substrate"` for Substrate queries; use the EVM dataset (e.g., `moonbeam-mainnet`) with `"type": "evm"` for EVM queries.
+> **Note:** Frontier EVM parachains (Moonbeam, Astar, Peaq) have both EVM and Substrate datasets. Use the `-substrate` suffix with `"type": "substrate"` for Substrate queries; use the EVM dataset (e.g., `moonbeam-mainnet`) with `"type": "evm"` for EVM queries.
 
 ## Non-EVM Chains
 
@@ -177,46 +161,54 @@ Different platforms use different names for the same chains:
 
 **Always use Portal-specific names when querying the Portal API.**
 
-## Complete Dataset List (July 2026, 234 datasets)
+## Retiring on 2026-08-20
 
-Grep this block to check a name; verify with the `/metadata` endpoint before use.
+These datasets retire on **2026-08-20 at 12:00 UTC** ([announcement](https://docs.sqd.dev/announcements/dataset-retirements-august-2026)). Still queryable until then, but do not build anything new on them. (`plume-devnet` and `poseidon-testnet` from the announced list of 67 are already gone.)
 
 ```
-0g-testnet abstract-mainnet abstract-testnet acala acurast-canary adi-mainnet adi-testnet agung agung-evm
-aleph-zero aleph-zero-evm-mainnet aleph-zero-testnet alpen-testnet amplitude arbitrum-nova arbitrum-one
-arbitrum-sepolia arthera-mainnet asset-hub-kusama asset-hub-paseo asset-hub-polkadot asset-hub-rococo
-asset-hub-westend astar-mainnet astar-substrate astar-zkevm-mainnet astar-zkyoto avail avalanche-mainnet
-avalanche-testnet b3-mainnet b3-sepolia base-mainnet base-sepolia basilisk beam-mainnet berachain-bartio
-berachain-mainnet bifrost-kusama bifrost-polkadot binance-mainnet binance-testnet bitcoin-mainnet
-bitfinity-mainnet bitfinity-testnet bitgert-mainnet bitgert-testnet bittensor bittensor-mainnet-evm
+0g-testnet acala aleph-zero aleph-zero-evm-mainnet arthera-mainnet avail basilisk berachain-bartio
+bifrost-kusama bifrost-polkadot bitfinity-mainnet bitgert-mainnet bridge-hub-kusama bridge-hub-polkadot canto
+centrifuge cere clover collectives-polkadot crust cyber-mainnet darwinia darwinia-crab degen-chain dfk-chain
+dogechain-mainnet equilibrium frequency gelato-arbitrum-blueberry immutable-zkevm-mainnet integritee interlay
+joystream karura khala kilt kintsugi litentry merlin-mainnet moonsama nakachain neon-devnet neon-mainnet
+ozean-testnet paseo pendulum people-chain phala picasso polkadex polymesh reef reef-testnet robonomics
+shibuya-substrate shiden-mainnet shiden-substrate skale-nebula sora-mainnet subsocial-parachain
+superseed-mainnet tanssi ternoa turing-avail turing-mainnet
+```
+
+## Complete Dataset List (August 2026, 200 datasets)
+
+Grep this block to check a name; verify with the `/metadata` endpoint before use. The retiring datasets above are still included until 2026-08-20.
+
+```
+0g-testnet abstract-mainnet abstract-testnet acala agung agung-evm aleph-zero aleph-zero-evm-mainnet
+alpen-testnet amplitude arbitrum-nova arbitrum-one arbitrum-sepolia arthera-mainnet asset-hub-kusama
+asset-hub-paseo asset-hub-polkadot asset-hub-westend astar-mainnet astar-substrate astar-zkevm-mainnet
+astar-zkyoto avail avalanche-mainnet avalanche-testnet b3-mainnet b3-sepolia base-mainnet base-sepolia
+basilisk beam-mainnet berachain-bartio berachain-mainnet bifrost-kusama bifrost-polkadot binance-mainnet
+binance-testnet bitcoin-mainnet bitfinity-mainnet bitgert-mainnet bittensor bittensor-mainnet-evm
 bittensor-testnet bittensor-testnet-evm blast-l2-mainnet blast-sepolia bob-mainnet bob-sepolia
-bridge-hub-kusama bridge-hub-polkadot bridge-hub-rococo bridge-hub-westend camp-network-testnet-v2 canto
-canto-testnet celo-alfajores-testnet celo-mainnet centrifuge cere chainflip clover collectives-polkadot
-collectives-westend core-mainnet crust cyber-mainnet cyberconnect-l2-testnet dancebox darwinia
-darwinia-crab data-avail degen-chain dfk-chain dogechain-mainnet dogechain-testnet eden
-enjin-canary-matrix enjin-matrix enjin-relay equilibrium ethereum-holesky ethereum-hoodi ethereum-mainnet
-ethereum-sepolia etherlink-mainnet etherlink-shadownet etherlink-testnet exosama flare-mainnet
-formicarium-testnet foucoco frequency galxe-gravity gelato-arbitrum-blueberry gelato-opcelestia-raspberry
-gemini-3h gnosis-mainnet hedera-mainnet hemi-mainnet hemi-testnet hydradx hyperliquid-fills
-hyperliquid-mainnet hyperliquid-replica-cmds hyperliquid-testnet immutable-zkevm-mainnet
-immutable-zkevm-testnet ink-mainnet ink-sepolia integritee interlay invarch-parachain invarch-tinkernet
-joystream karura katana-mainnet khala kilt kintsugi kusama kyoto-testnet linea-mainnet litentry
-lukso-mainnet manta-pacific manta-pacific-sepolia mantle-mainnet mantle-sepolia megaeth-mainnet
-megaeth-testnet memecore-insectarium memecore-mainnet merlin-mainnet merlin-testnet metis-mainnet
-mode-mainnet monad-mainnet monad-testnet moonbase-substrate moonbase-testnet moonbeam-mainnet
-moonbeam-substrate moonriver-mainnet moonriver-substrate moonsama nakachain neon-devnet neon-mainnet
-neox-testnet opbnb-mainnet opbnb-testnet optimism-mainnet optimism-sepolia ozean-testnet paseo
-peaq-mainnet peaq-mainnet-substrate pendulum people-chain phala phala-testnet picasso plasma-mainnet
-plasma-testnet plume-mainnet plume-testnet polimec polkadex polkadot polygon-amoy-testnet polygon-mainnet
+bridge-hub-kusama bridge-hub-polkadot canto celo-alfajores-testnet celo-mainnet centrifuge cere chainflip
+clover collectives-polkadot core-mainnet crust cyber-mainnet darwinia darwinia-crab degen-chain dfk-chain
+dogechain-mainnet eden enjin-canary-matrix enjin-matrix enjin-relay equilibrium ethereum-hoodi
+ethereum-mainnet ethereum-mainnet-tb ethereum-sepolia etherlink-mainnet etherlink-shadownet etherlink-testnet
+flare-mainnet frequency galxe-gravity gelato-arbitrum-blueberry gelato-opcelestia-raspberry gnosis-mainnet
+hedera-mainnet hemi-mainnet hemi-testnet hydradx hyperliquid-fills hyperliquid-mainnet
+hyperliquid-replica-cmds hyperliquid-testnet immutable-zkevm-mainnet ink-mainnet ink-sepolia integritee
+interlay invarch-parachain invarch-tinkernet joystream karura katana-mainnet khala kilt kintsugi kusama
+linea-mainnet litentry lukso-mainnet manta-pacific manta-pacific-sepolia mantle-mainnet mantle-sepolia
+megaeth-mainnet megaeth-testnet merlin-mainnet metis-mainnet mode-mainnet monad-mainnet monad-testnet
+moonbase-substrate moonbase-testnet moonbeam-mainnet moonbeam-substrate moonriver-mainnet moonriver-substrate
+moonsama nakachain neon-devnet neon-mainnet opbnb-mainnet opbnb-testnet optimism-mainnet optimism-sepolia
+ozean-testnet paseo peaq-mainnet peaq-mainnet-substrate pendulum people-chain phala picasso plasma-mainnet
+plasma-testnet plume-mainnet plume-testnet polkadex polkadot polygon-amoy-testnet polygon-mainnet
 polygon-zkevm-cardona-testnet polygon-zkevm-mainnet polymesh prom-mainnet reef reef-testnet robonomics
-rococo rolimec scroll-mainnet scroll-sepolia shibuya-substrate shibuya-testnet shiden-mainnet
-shiden-substrate skale-nebula solana-devnet solana-mainnet soneium-mainnet soneium-minato-testnet
-sonic-mainnet sonic-testnet soon-devnet soon-mainnet soon-testnet sora-mainnet stratovm-sepolia
-subsocial-parachain superseed-mainnet superseed-sepolia svm-bnb-mainnet svm-bnb-testnet tac-mainnet
-taiko-mainnet tanssi ternoa tron-mainnet turing-avail turing-mainnet unichain-mainnet unichain-sepolia
-vara vara-testnet westend x1-testnet xlayer-mainnet xlayer-testnet zeitgeist zeitgeist-testnet
-zklink-nova-mainnet zksync-mainnet zksync-sepolia zkverify-mainnet zkverify-testnet zora-mainnet
-zora-sepolia
+scroll-mainnet scroll-sepolia shibuya-substrate shiden-mainnet shiden-substrate skale-nebula solana-devnet
+solana-mainnet soneium-mainnet soneium-minato-testnet sonic-mainnet sonic-testnet soon-devnet soon-mainnet
+soon-testnet sora-mainnet subsocial-parachain superseed-mainnet svm-bnb-mainnet svm-bnb-testnet tac-mainnet
+taiko-mainnet tanssi ternoa tron-mainnet turing-avail turing-mainnet unichain-mainnet unichain-sepolia vara
+vara-testnet x1-testnet xlayer-mainnet xlayer-testnet zeitgeist zeitgeist-testnet zklink-nova-mainnet
+zksync-mainnet zksync-sepolia zkverify-mainnet zkverify-testnet zora-mainnet zora-sepolia
 ```
 
 ## Quick Reference: Top Chains

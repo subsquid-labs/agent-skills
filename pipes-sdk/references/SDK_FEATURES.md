@@ -161,8 +161,10 @@ Request methods on `BitcoinQueryBuilder`: `addTransaction` (`{inputs, outputs}` 
 ## New EVM Query Fields (alpha.14+)
 
 Added to the EVM field selection:
-- **Block:** `uncles`, `withdrawalsRoot`, `withdrawals`
-- **Transaction:** `logsBloom`, `accessList`
+- **Block:** `uncles`, `withdrawalsRoot`, `withdrawals` (alpha.14+); `blobGasUsed`, `excessBlobGas` (alpha.20+)
+- **Transaction:** `logsBloom`, `accessList` (alpha.14+); EIP-4844 blob fields `blobVersionedHashes`, `blobGasUsed`, `blobGasPrice` (alpha.20+, populated on type-3 transactions)
+
+Portal itself serves a few more columns the SDK schema doesn't type yet (`parentBeaconBlockRoot`, `requestsHash` on blocks; `maxFeePerBlobGas` on transactions). Column availability varies by dataset — `ethereum-mainnet` and `polygon-mainnet` were reindexed from genesis with the full set. alpha.20 also made the decoder tolerant of chains without post-London/post-Cancun fields.
 
 ## Typed Error System
 

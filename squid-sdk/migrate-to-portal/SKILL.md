@@ -3,13 +3,15 @@ name: migrate-to-portal
 description: Migrate an existing Squid SDK indexer (EVM or Solana) off the v2 gateway and onto the Portal data source. Covers the package swap (`@subsquid/evm-processor` → `@subsquid/evm-stream` + `@subsquid/evm-objects` + `@subsquid/batch-processor` for EVM; `@subsquid/solana-stream@^0.x` → `^1.x` for Solana), the API/type shape changes, and field-selection changes. Use when the user mentions migrating, porting, upgrading, or converting a v2 squid to Portal; references `v2.archive.subsquid.io`, `setGateway`, `setDataSource`, `lookupArchive`, or `SolanaRpcClient`; or hits TS errors on `EvmBatchProcessor`, `evmLog`, or `block.header.slot` after a `@subsquid/*` bump.
 metadata:
   author: subsquid
-  version: "1.0.0"
+  version: "1.1.0"
   category: documentation
 ---
 
 # Migrate a Squid to Portal
 
 Walks the migration of an existing Squid SDK indexer onto the Portal data source. EVM and Solana have different package sets; the migration shape (data source + types + field selection) is parallel. Upstream doc (unified, both chains): <https://docs.sqd.dev/en/sdk/migration/gateway-to-portal>.
+
+> **The v2 gateways are actively being sunset.** On 2026-08-05, 18 datasets (including `astar-mainnet`, `berachain-mainnet`, `celo-mainnet`, `linea-mainnet`, `scroll-mainnet`, `taiko-mainnet`, `unichain-mainnet`, `zksync-mainnet`, `zora-mainnet`) became **Portal-only** — a v2 squid on those chains is already broken and must migrate. 67 more low-usage datasets retire from both v2 and Portal on **2026-08-20** ([announcement](https://docs.sqd.dev/announcements/dataset-retirements-august-2026)); check the target dataset in pre-flight step 2 before migrating. The [July 30, 2026 Squid SDK release](https://github.com/subsquid/squid-sdk/releases/tag/2026-07-30) also introduced the `@subsquid/squid-sdk` umbrella package with an automatic Portal/RPC failover data source — an option to consider for new work, though this guide's `@subsquid/evm-stream` target remains current.
 
 ## When to use this skill
 
@@ -53,7 +55,7 @@ Activate when the user says any of:
 
 ## Add the v2 gateway API key — EVM only (alternative to migrating)
 
-As of the May 19, 2026 12:00 UTC cutover, authenticated calls to the v2 gateway are **mandatory** for self-hosted setups (see <https://docs.sqd.dev/changelog/gateway-api-keys>). **Migrating to Portal is the recommended path** — Portal needs no API key. This v2-with-`apiKey` configuration is the alternative if you must stay on the v2 gateway for now.
+As of the May 19, 2026 12:00 UTC cutover, authenticated calls to the v2 gateway are **mandatory** for self-hosted setups (see <https://docs.sqd.dev/changelog/gateway-api-keys>). **Migrating to Portal is the recommended path** — Portal needs no API key. This v2-with-`apiKey` configuration is the alternative if you must stay on the v2 gateway for now — and only where a v2 gateway still exists: 18 datasets became Portal-only on 2026-08-05 (see the note at the top), and gateways are slated for sunset later in 2026.
 
 Only use this section if the user wants to stay on EVM v2 gateways for now. When in doubt, ask them.
 

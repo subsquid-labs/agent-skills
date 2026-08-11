@@ -14,7 +14,7 @@ Skills live at the repo root. The skill directory name matches the skill's front
 pipes-sdk/                 # Build, deploy, troubleshoot Pipes SDK indexers
   SKILL.md
   references/
-portal/                    # Query SQD Portal across 225+ chains
+portal/                    # Query SQD Portal across 200+ chains
   SKILL.md
   references/
 squid-sdk/

@@ -200,7 +200,7 @@ The Pipes SDK is feature-rich — a handful of patterns cover 80% of use cases.
 - **Pipe-id-keyed cursors (alpha.15+)**: targets key sync state by the pipe `id`, so multiple pipes can share one database. Legacy ClickHouse cursors migrate automatically — see [SDK_FEATURES.md](references/SDK_FEATURES.md#cursor-keying--upgrading-to-alpha15).
 - **Beta rename map**: current names are `evmEventDecoder`, `evmPortalStream`, `solanaPortalStream`, `hyperliquidFillsPortalStream`, `mockEvmPortalStream`, `chunkForInsert`. Code from alpha-era scaffolds may still say `evmDecoder` or `evmPortalSource` (a removed alias of `evmPortalStream`) — see [SDK_FEATURES.md](references/SDK_FEATURES.md#renamed-in-the-beta-line) before "fixing" either spelling.
 - **Portal response cache**: `portalSqliteCache` (from `@subsquid/pipes/portal-cache/node`) caches Portal stream responses on disk (SQLite + zstd) to speed up re-runs and backfills over the same range; wire it via the stream's `cache` option — see [SDK_FEATURES.md](references/SDK_FEATURES.md).
-- **Observability**: Prometheus metrics via `metricsServer()` (`@subsquid/pipes/metrics/node`, stream `metrics` option) and OpenTelemetry tracing via `opentelemetryProfiler()` (`@subsquid/pipes/opentelemetry`, stream `profiler` option) — see [SDK_FEATURES.md](references/SDK_FEATURES.md).
+- **Observability**: Prometheus metrics via `metricsServer()` (`@subsquid/pipes/metrics/node`, stream `metrics` option) and OpenTelemetry tracing via `opentelemetryProfiler()` (`@subsquid/pipes/opentelemetry`, stream `profiler` option) — see [SDK_FEATURES.md](references/SDK_FEATURES.md). For a local dashboard (progress, speed, memory, query details — multiple indexers in one view), see [Pipes UI](https://docs.sqd.dev/en/sdk/pipes-sdk/evm/guides/basic-development/pipes-ui).
 
 ### DeFi Protocol Forks
 
@@ -273,4 +273,4 @@ Dashboard-grade ClickHouse patterns (time bucketing, conditional aggregation, pa
 
 ## Related
 
-- **portal** — query blockchain data across 230+ chains via Portal MCP or the SQD Portal Stream API. Use it to verify contract events, discover dataset names, cross-check indexed data, and decide when a query should become a Pipes/Squid pipeline.
+- **portal** — query blockchain data across 200+ chains via Portal MCP or the SQD Portal Stream API. Use it to verify contract events, discover dataset names, cross-check indexed data, and decide when a query should become a Pipes/Squid pipeline.

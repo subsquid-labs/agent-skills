@@ -270,7 +270,7 @@ Many Solana DeFi protocols use layered architecture where user-facing programs c
 
 ## Tron (No CLI Template)
 
-The Pipes SDK supports Tron natively via `@subsquid/pipes/tron`, but the CLI cannot scaffold Tron projects — set up manually (package.json, tsconfig, src/index.ts, sink config). Install the SDK with a bare `npm i @subsquid/pipes` (npm `latest` is now the 1.0 beta line, currently `1.0.0-beta.1`).
+The Pipes SDK supports Tron natively via `@subsquid/pipes/tron`, but the CLI cannot scaffold Tron projects — set up manually (package.json, tsconfig, src/index.ts, sink config). Install the SDK with a bare `npm i @subsquid/pipes` (npm `latest` is now the 1.0 beta line, currently `1.0.0-beta.1`). Official walkthrough: [Tron quickstart](https://docs.sqd.dev/en/sdk/pipes-sdk/tron/quickstart).
 
 ```typescript
 import { TronQueryBuilder, tronPortalStream } from '@subsquid/pipes/tron'
@@ -308,7 +308,7 @@ Full example: `docs/examples/tron/01.trc20-transfers.example.ts` in the [pipes-s
 
 ## Bitcoin (No CLI Template)
 
-The Pipes SDK supports Bitcoin natively via `@subsquid/pipes/bitcoin`, but the CLI cannot scaffold Bitcoin projects — set up manually. Install the SDK with a bare `npm i @subsquid/pipes` (npm `latest` is now the 1.0 beta line).
+The Pipes SDK supports Bitcoin natively via `@subsquid/pipes/bitcoin`, but the CLI cannot scaffold Bitcoin projects — set up manually. Install the SDK with a bare `npm i @subsquid/pipes` (npm `latest` is now the 1.0 beta line). Official walkthrough: [Bitcoin quickstart](https://docs.sqd.dev/en/sdk/pipes-sdk/bitcoin/quickstart).
 
 ```typescript
 import { BitcoinQueryBuilder, bitcoinPortalStream } from '@subsquid/pipes/bitcoin'
@@ -344,7 +344,7 @@ Full example: `docs/examples/bitcoin/01.utxo-decoder.example.ts` in the [pipes-s
 
 ## Hyperliquid Fills (No CLI Template)
 
-The Pipes SDK supports Hyperliquid fills natively via `@subsquid/pipes/hyperliquid`, but there is **no CLI template yet**. Scaffold manually and install the SDK with a bare `npm i @subsquid/pipes` (npm `latest` is now the 1.0 beta line). See [HYPERLIQUID_GUIDE.md](HYPERLIQUID_GUIDE.md) for the complete walkthrough.
+The Pipes SDK supports Hyperliquid fills natively via `@subsquid/pipes/hyperliquid`, but there is **no CLI template yet**. Scaffold manually and install the SDK with a bare `npm i @subsquid/pipes` (npm `latest` is now the 1.0 beta line). See [HYPERLIQUID_GUIDE.md](HYPERLIQUID_GUIDE.md) for the complete walkthrough, or the official [Hyperliquid quickstart](https://docs.sqd.dev/en/sdk/pipes-sdk/hyperliquid/quickstart).
 
 Quick pattern:
 ```typescript
