@@ -2,15 +2,21 @@
 
 Patterns for keeping long-running Pipes SDK indexers alive through network failures, timeouts, and session interruptions.
 
-## The Problem
+## What the SDK Handles vs. What Kills the Process
 
-Portal API streams over HTTP. Long-running syncs (millions of blocks) will inevitably hit:
-- `ETIMEDOUT` — TCP read timeout, connection dropped
-- `TypeError: terminated` — fetch aborted due to socket close
-- `ECONNRESET` — server-side connection reset
-- `429 Too Many Requests` — rate limiting
+Portal API streams over HTTP. Long-running syncs (millions of blocks) will inevitably hit transient failures — and the SDK 1.0 line **retries these itself, indefinitely by default**:
 
-The Pipes SDK does **not** auto-retry on network errors. A single timeout kills the process.
+- Connection errors: `ETIMEDOUT`, `ECONNRESET`, `TypeError: terminated`, `fetch failed`
+- HTTP timeouts
+- Retryable statuses: `429`, `502`, `503`, `504`, `521`–`524` — including Portal's structured `overloaded` (`rate_limit_error`) and `availability_error` responses
+
+It honors the `Retry-After` header when Portal sends one (mandatory on `overloaded`), otherwise backs off on a fixed schedule (10ms → 100ms → 500ms → 2s → 10s → 20s, then 20s repeating). A network blip therefore does *not* kill the process — it shows up as a stalled sync with retry warnings.
+
+What still kills the process (and what supervisors are for):
+- **Decode errors** — an undecodable record is fatal by default (see the `onError` hook in [SDK_FEATURES.md](SDK_FEATURES.md#decode-error-hook-onerror))
+- **Sink failures** — ClickHouse/Postgres down or misconfigured, schema drift
+- **Non-retryable Portal errors** — `invalid_request_error` (`malformed_request`, `unknown_dataset`): the request is wrong and retrying can't help
+- **Process-level faults** — OOM kills, unhandled exceptions in your `.pipe()` transforms, host reboots
 
 ## Pattern 1: Process Supervisor (Recommended for Production)
 
@@ -159,14 +165,14 @@ main()
 
 ## Why Restarts Are Safe
 
-The Pipes SDK writes a sync cursor to `{database}.sync` after each batch commit. On restart:
+The Pipes SDK writes a sync cursor to `{database}.sync` after each batch commit, keyed by the pipe's `id` (since alpha.15; older versions used a static `'stream'` key). On restart:
 
-1. SDK reads `sync` table → finds last committed block
+1. SDK reads `sync` table → finds the last committed block for this pipe `id`
 2. Logs `"Resuming indexing from X block"`
 3. Requests Portal data from block X onward
 4. No duplicate data (CollapsingMergeTree deduplicates via `sign` column)
 
-The only risk is if the sync table is corrupted or shared between indexers. Each indexer should use its own database.
+The remaining risk is a corrupted sync table, or two pipes sharing the same `id` and database. Keep one database per project and don't rename a pipe's `id` casually — the cursor is keyed by it, so a rename orphans the old cursor and the pipe re-syncs from its range start.
 
 ## Diagnosing Repeated Crashes
 
@@ -182,9 +188,9 @@ grep "Resuming" /tmp/my-indexer.log | tail -3
 
 If it always resumes from the same block and crashes:
 - The data at that block may be malformed
-- Try skipping ahead: update the sync table manually
+- Try skipping ahead: update the sync table manually (the row `id` is your pipe's `id`; legacy pre-alpha.15 projects used `'stream'`)
   ```sql
-  ALTER TABLE my_db.sync UPDATE cursor = '{"block": NEXT_BLOCK}' WHERE id = 'stream'
+  ALTER TABLE my_db.sync UPDATE cursor = '{"block": NEXT_BLOCK}' WHERE id = '<pipe-id>'
   ```
 - Or drop sync and restart from a later block by changing `range.from` in source config
 

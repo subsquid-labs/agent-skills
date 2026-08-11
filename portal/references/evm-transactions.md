@@ -35,6 +35,14 @@
 - `sighash` - Function selector (first 4 bytes of input, INDEXED)
 - `fields` - Which fields to include in response
 
+Valid transaction **filter** keys are only `from`, `to`, `sighash`, `firstNonce`, `lastNonce` (plus the `logs`/`traces`/`stateDiffs` relation flags) — anything else (e.g. `type`) is a **response field**, not a filter, and gets a `malformed_request` error.
+
+## Extended Fields (verified August 2026)
+
+Beyond the classic set, the transaction field selection supports `type`, `status`, `logsBloom`, `accessList`, and the EIP-4844 blob fields `blobGasUsed`, `blobGasPrice`, `maxFeePerBlobGas`, `blobVersionedHashes` (populated on type-3 transactions). Block fields include `uncles`, `withdrawals`, `withdrawalsRoot`, `blobGasUsed`, `excessBlobGas`, `parentBeaconBlockRoot`, and `requestsHash`.
+
+**Availability varies by dataset**: `ethereum-mainnet` and `polygon-mainnet` were reindexed from genesis (July 2026) and serve the full column set across all history; other EVM datasets may lack some of the newer columns. A field a dataset doesn't have simply comes back `null`/absent — probe one block before relying on it.
+
 ---
 
 ## Understanding Function Selectors (Sighash)

@@ -1,19 +1,19 @@
 ---
 name: portal
-description: "Query blockchain data across 230+ datasets with SQD Portal — EVM, Solana, Substrate, Bitcoin, Tron, Hyperliquid — and choose the right execution path: Portal MCP for bounded answers, Portal Stream API/curl for raw exports, or Pipes/Squid for durable pipelines."
+description: "Query blockchain data across 200+ datasets with SQD Portal — EVM, Solana, Substrate, Bitcoin, Tron, Hyperliquid — and choose the right execution path: Portal MCP for bounded answers, Portal Stream API/curl for raw exports, or Pipes/Squid for durable pipelines."
 allowed-tools:
   - Bash
   - WebFetch
   - WebSearch
 metadata:
   author: subsquid
-  version: "1.2.0"
+  version: "1.3.0"
   category: portal-core
 ---
 
 # Portal
 
-Query and analyze blockchain data across 230+ datasets using SQD Portal. Use this skill to decide whether the job belongs in SQD Portal MCP tools, a raw Portal Stream API/curl request, or a durable Pipes/Squid indexer.
+Query and analyze blockchain data across 200+ datasets using SQD Portal. Use this skill to decide whether the job belongs in SQD Portal MCP tools, a raw Portal Stream API/curl request, or a durable Pipes/Squid indexer.
 
 This skill should not be treated as a static copy of the MCP tool catalog. When the SQD Portal MCP server is available, read `sqd://tools` for the current grouped tool guide and `sqd://tools/{tool_name}` for exact per-tool guidance.
 
@@ -82,7 +82,7 @@ Default order:
 | Plasma | `plasma-mainnet` | EVM |
 | Unichain | `unichain-mainnet` | EVM |
 
-> **Full mapping:** See `references/dataset-mapping.md` for all 230+ datasets including L2s, alt-L1s, and testnets, plus the real-time dataset list.
+> **Full mapping:** See `references/dataset-mapping.md` for the full 200-dataset catalog including L2s, alt-L1s, and testnets, the real-time dataset list, and the datasets retiring on 2026-08-20.
 
 ### Common Mistakes
 
@@ -266,8 +266,10 @@ TO=$(curl -s https://portal.sqd.dev/datasets/base-mainnet/head | jq -r .number)
 
 ### Errors
 
-- `404 {"message":"block not in hotblocks"}` — timestamp is in the future, or beyond the dataset head
-- `404 Unknown dataset` — wrong dataset name (see Step 1)
+Both come back in Portal's structured envelope (see Error Handling below):
+
+- `404` with `"code": "not_found"`, message `"block not in hotblocks"` — timestamp is in the future, or beyond the dataset head
+- `404` with `"code": "unknown_dataset"` — wrong dataset name (see Step 1)
 
 > **Don't estimate blocks from `(now - ts) / block_time`** — block times vary and the result drifts by hundreds of blocks. Use this endpoint instead.
 
@@ -389,6 +391,8 @@ Recommend Pipes or a Squid when the user needs:
 
 Phrase the handoff clearly: Portal MCP is for answering and exploring; raw Stream API is for reproducible one-off extraction; Pipes/Squid is for maintained data pipelines.
 
+If the user already runs a [Ponder](https://ponder.sh) indexer, recommend [Ponder on Portal](https://docs.sqd.dev/en/sdk/alternative-clients/ponder) instead of a rewrite — `@subsquid/ponder` is a drop-in build that backs Ponder's historical sync with Portal (same handlers, schema, and binary; one `portal:` line per chain).
+
 ---
 
 ## Response Format
@@ -402,6 +406,31 @@ All Portal responses use **JSON Lines** (NDJSON) — one JSON object per line:
 ```
 
 **Parsing:** Split by newlines, parse each line as JSON. First line is always the block header.
+
+A **204 No Content** is not an error — it means the requested range has no blocks yet (empty body, nothing to parse).
+
+---
+
+## Error Handling (Structured Errors)
+
+Every Portal error — any endpoint, any data source — uses one envelope:
+
+```json
+{"error": {"type": "rate_limit_error", "code": "overloaded", "message": "...", "param": "...", "request_id": "..."}}
+```
+
+**Branch on `type`** (closed set of four), **match on `code`** for specific cases, and never parse `message` (prose, not stable). Every response carries an `x-request-id` header — quote it when reporting problems.
+
+| `type` | Retry? | Key codes |
+|---|---|---|
+| `invalid_request_error` | No — fix the request | `malformed_request` (400), `unknown_dataset` (404), `not_found` (404), `base_block_mismatch` (409) |
+| `rate_limit_error` | Yes, after `Retry-After` (mandatory, seconds) | `overloaded` (529, proxied 429/529) |
+| `availability_error` | Yes, with backoff | `no_workers`, `retries_exhausted` (503), `upstream_unavailable` (502) |
+| `api_error` | No — report with `request_id` | `internal_error`, `worker_failure` (500), `unclassified` |
+
+**Resuming a stream? Pass `parentBlockHash`** (hash of the parent of `fromBlock`). On a reorg the Portal answers `409` `base_block_mismatch` with a top-level `previousBlocks` list of canonical `{number, hash}` pairs — walk it back to a block you trust and resume from there. Omitting `parentBlockHash` means silently ingesting a forked chain. `/finalized-stream` never 409s.
+
+> **Full contract:** `references/error-handling.md` — complete codes table, fork-recovery walk, `Retry-After` semantics, CORS-exposed headers.
 
 ---
 
@@ -451,7 +480,9 @@ Always add address/topic/programId filters and reasonable block ranges.
 ## Additional Resources
 
 - **[Available Datasets](https://portal.sqd.dev/datasets)** — Complete list of supported networks
+- **[Portal API Reference](https://portal.sqd.dev/docs)** — Live OpenAPI docs: endpoints, error handling, fork recovery
 - **[Portal MCP Server](https://docs.sqd.dev/en/ai/mcp-server)** — Hosted MCP endpoint and current tool reference
+- **[SQD Claude Connector](https://docs.sqd.dev/en/ai/claude-connector)** — One-click Portal MCP for Claude via the [Claude Directory](https://claude.ai/directory/connectors/sqd)
 - **[llms.txt](https://docs.sqd.dev/llms.txt)** — Quick reference for Portal API
 - **[llms-full.txt](https://docs.sqd.dev/llms-full.txt)** — Complete Portal documentation
 - **[EVM OpenAPI Schema](https://docs.sqd.dev/en/ai/evm-openapi)** — EVM API specification

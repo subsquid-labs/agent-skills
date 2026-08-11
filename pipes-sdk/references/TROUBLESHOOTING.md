@@ -39,13 +39,19 @@ Then `npm install` and verify types resolve.
 ```
 Error: connect ECONNREFUSED
 Error: Portal request failed with status 429
+{"error":{"type":"rate_limit_error","code":"overloaded","message":"..."}}
 Error: Portal timeout after 30s
 ```
 
+**First, know what the SDK already does:** the Pipes SDK retries retryable Portal failures **indefinitely by default** — connection errors (`ECONNREFUSED`, `ECONNRESET`, `ETIMEDOUT`, `terminated`), HTTP timeouts, and 429/502/503/504/52x responses — honoring the `Retry-After` header when present, otherwise backing off on a schedule (10ms → 20s). A transient blip does not kill the pipe; sustained failures show up as a stalled sync with retry warnings in the log.
+
+Portal returns **structured errors** (`{"error": {"type", "code", ...}}`): `rate_limit_error`/`overloaded` (429/529, always carries `Retry-After`) and `availability_error` (`no_workers`, `retries_exhausted`, `upstream_unavailable`; 502/503) are retried by the SDK. `invalid_request_error` (`malformed_request`, `unknown_dataset`) is **not retryable** — the request itself is wrong.
+
 **Fix options:**
-- **429 rate limit** — reduce block range or add delay
-- **ECONNREFUSED** — check internet, verify Portal URL
-- **Timeout** — increase timeout or reduce batch size
+- **Persistent 429/529 `overloaded`** — Portal is at capacity: reduce concurrent indexers (especially Solana), or wait
+- **`unknown_dataset` (404)** — wrong dataset name in the portal URL; verify with `curl -I https://portal.sqd.dev/datasets/{name}/metadata`
+- **ECONNREFUSED that never recovers** — check internet, verify Portal URL
+- **Timeout loops** — reduce batch size / block range
 
 ```typescript
 // Smaller range reduces load
@@ -99,7 +105,7 @@ TypeError: Cannot read property 'from' of undefined
 **Symptoms:**
 ```
 TypeError: Cannot read properties of undefined (reading 'topic')
-    at evmDecoder (evm-decoder.ts:322:70)
+    at evmEventDecoder (evm-decoder.ts:...)   // "at evmDecoder" on alpha-era installs
 ```
 
 **Diagnosis:** CLI/typegen fetched the proxy ABI (only `Upgraded` event), but `index.ts` references events like `Supply`, `Borrow`, etc. that only exist on the implementation.
@@ -292,6 +298,24 @@ TypeError: Cannot read properties of undefined (reading 'from')
 ```
 
 Dataset starts at block **750,000,000**. In SDK 1.0+, use `hyperliquidFillsQuery()` instead of `new HyperliquidFillsQueryBuilder()`.
+
+## Error Pattern 11: Renamed SDK Exports After Reinstall
+
+**Symptoms:** a previously working project fails after a fresh `npm install` / lockfile regeneration:
+```
+TypeError: evmDecoder is not a function
+SyntaxError: The requested module '@subsquid/pipes/evm' does not provide an export named 'evmPortalSource'
+```
+
+**Diagnosis:** the project pins the floating `"alpha"` dist-tag (the old alpha CLI's default), which now resolves to `1.0.0-alpha.21` — a version that already carries the beta-line renames: `evmDecoder` → `evmEventDecoder`, the `evmPortalSource`/`solanaPortalSource`/`hyperliquidFillsPortalSource` aliases removed (only `*PortalStream` remain), `evmPortalMockStream` → `mockEvmPortalStream`, `batchForInsert`/`chunk` → `chunkForInsert`. Confirm with:
+```bash
+npm ls @subsquid/pipes        # installed version
+grep '"@subsquid/pipes"' package.json   # "alpha" = floating tag
+```
+
+**Fix (pick one):**
+1. **Migrate (recommended):** rename the imports/calls to the current names (see [SDK_FEATURES.md](SDK_FEATURES.md#renamed-in-the-beta-line)) and pin `"@subsquid/pipes": "^1.0.0-beta.1"`.
+2. **Freeze:** pin the exact version the code was written for, e.g. `"@subsquid/pipes": "1.0.0-alpha.16"`, and migrate later.
 
 ## Prevention Tips
 

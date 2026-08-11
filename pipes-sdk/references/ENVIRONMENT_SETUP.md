@@ -25,7 +25,7 @@ Before building indexers, ensure you have:
 
 ### 1. Node.js
 
-**Required Version**: >= 22.15.0 — `@subsquid/pipes` (1.0.0-alpha.16+) declares `engines.node >= 22.15.0`, so v20 no longer qualifies.
+**Required Version**: >= 22.15.0 — `@subsquid/pipes` (the 1.0 line, currently `1.0.0-beta.1`) declares `engines.node >= 22.15.0`, so v20 no longer qualifies.
 
 **WARNING: Avoid Node.js v25.x** — It has known zstd decompression bugs that cause random crashes when streaming data from the Portal API into ClickHouse.
 
@@ -193,12 +193,12 @@ npx tsc --version
 
 **Test access**:
 ```bash
-curl -X POST https://v2.archive.subsquid.io/query/ethereum-mainnet \
+curl -sS -X POST https://portal.sqd.dev/datasets/ethereum-mainnet/stream \
   -H "Content-Type: application/json" \
   -d '{
+    "type": "evm",
     "fromBlock": 18000000,
     "toBlock": 18000001,
-    "logs": [],
     "fields": {
       "block": {
         "number": true
@@ -208,7 +208,7 @@ curl -X POST https://v2.archive.subsquid.io/query/ethereum-mainnet \
   -w "\nHTTP Status: %{http_code}\n"
 ```
 
-**Expected**: HTTP Status 200 with JSON response
+**Expected**: HTTP Status 200 with NDJSON response (one block header per line). Errors come back in Portal's structured envelope (`{"error":{"type","code",...}}`) — e.g. `unknown_dataset` for a wrong dataset name.
 
 **If fails**:
 - Check internet connection
@@ -275,12 +275,12 @@ npx tsc
 
 ```bash
 # Test CLI availability
-pnpx @subsquid/pipes-cli@1.0.0-alpha.4 --version
+pnpx @subsquid/pipes-cli@1.0.0-beta.2 --version
 ```
 
 **Note**: No local SDK installation needed - CLI is used via pnpx
 
-**Manual (non-CLI) setups — install the alpha tag**: a bare `npm install @subsquid/pipes` resolves to the npm `latest` tag, which is `0.1.0-beta.17` — the pre-1.0 API, a different SDK entirely. For 1.0 manual setups you must install `@subsquid/pipes@alpha` (or pin `"@subsquid/pipes": "alpha"` in `package.json`). CLI-scaffolded projects already pin `"@subsquid/pipes": "alpha"`, so only hand-written projects hit this trap.
+**Manual (non-CLI) setups**: the SDK is in **1.0.0 beta** and npm `latest` now points to `1.0.0-beta.1`, so a bare `npm install @subsquid/pipes` installs the current 1.0 API — the old "install `@alpha` or you get the pre-1.0 `0.1.0-beta.17`" trap is gone. Do **not** pin the floating `"alpha"` dist-tag anymore: it now resolves to `1.0.0-alpha.21`, which already uses the renamed beta-line exports, and a floating tag makes builds non-reproducible. Prefer a caret range like `"^1.0.0-beta.1"` (this is what the beta CLI generates; a plain `"^1.0.0"` excludes prereleases and resolves to nothing until stable 1.0.0 ships). The CLI itself is the remaining dist-tag trap: `@subsquid/pipes-cli@latest` is the old `1.0.0-alpha.1` — always pin `@subsquid/pipes-cli@1.0.0-beta.2` (or `@beta`).
 
 ## Platform-Specific Notes
 
@@ -371,14 +371,14 @@ npx tsc --version || echo "❌ Missing"
 
 # Portal API
 echo -n "Portal API: "
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST https://v2.archive.subsquid.io/query/ethereum-mainnet \
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST https://portal.sqd.dev/datasets/ethereum-mainnet/stream \
   -H "Content-Type: application/json" \
-  -d '{"fromBlock":18000000,"toBlock":18000001,"logs":[],"fields":{"block":{"number":true}}}')
+  -d '{"type":"evm","fromBlock":18000000,"toBlock":18000001,"fields":{"block":{"number":true}}}')
 [ "$STATUS" = "200" ] && echo "✅ Accessible" || echo "❌ Failed (HTTP $STATUS)"
 
 # Pipes CLI
 echo -n "Pipes CLI: "
-pnpx @subsquid/pipes-cli@1.0.0-alpha.4 --version > /dev/null 2>&1 && echo "✅ Available" || echo "❌ Failed"
+pnpx @subsquid/pipes-cli@1.0.0-beta.2 --version > /dev/null 2>&1 && echo "✅ Available" || echo "❌ Failed"
 
 echo ""
 echo "=== Setup Complete ==="
@@ -432,10 +432,10 @@ docker run -d --name clickhouse -p 8124:8123 clickhouse/clickhouse-server
 
 **Solution**:
 ```bash
-# Install newer Node.js with nvm
-nvm install 20
-nvm use 20
-nvm alias default 20
+# Install newer Node.js with nvm (>= 22.15.0 required)
+nvm install 22
+nvm use 22
+nvm alias default 22
 ```
 
 ### Issue 4: Cannot Access Portal API
@@ -448,10 +448,10 @@ nvm alias default 20
 ping 8.8.8.8
 
 # Check DNS
-nslookup v2.archive.subsquid.io
+nslookup portal.sqd.dev
 
-# Try with curl verbose
-curl -v https://v2.archive.subsquid.io/query/ethereum-mainnet
+# Try with curl verbose (200 = reachable)
+curl -v https://portal.sqd.dev/datasets/ethereum-mainnet/metadata
 
 # Check firewall/proxy settings
 ```
@@ -514,7 +514,7 @@ docker run -d --name clickhouse -p 8123:8123 \
 # 4. Verify
 node --version
 docker ps
-pnpx @subsquid/pipes-cli@1.0.0-alpha.4 --version
+pnpx @subsquid/pipes-cli@1.0.0-beta.2 --version
 
 # 5. Ready to build!
 ```

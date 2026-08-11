@@ -27,10 +27,10 @@ mkdir hl-indexer && cd hl-indexer
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@subsquid/pipes": "0.1.0-beta.16",
-    "@clickhouse/client": "^1.8.1",
+    "@subsquid/pipes": "^1.0.0-beta.1",
+    "@clickhouse/client": "^1.14.0",
     "dotenv": "^16.4.7",
-    "zod": "^3.24.2"
+    "zod": "^4.3.4"
   },
   "devDependencies": {
     "tsx": "^4.19.4",
@@ -464,9 +464,9 @@ For EVM indexers the divisor is not a fixed rule either: it depends on the Click
 .addRange({ from: 750000000 })
 ```
 
-### 3. No evmDecoder — use .pipe() directly
+### 3. No event decoder — use .pipe() directly
 
-Hyperliquid fills don't use `evmDecoder`. `.pipe()` receives `Block[]` directly where each block has `header` and `fills`. Use `.pipe()` to transform the data yourself.
+Hyperliquid fills don't use `evmEventDecoder`. `.pipe()` receives `Block[]` directly where each block has `header` and `fills`. Use `.pipe()` to transform the data yourself.
 
 ### 4. Portal URL includes the dataset name
 

@@ -1,28 +1,45 @@
 # SDK 1.0 Features & Testing
 
-Reference for SDK 1.0+ APIs: time-based ranges, `defineAbi`, query builder shorthands, typed errors, the testing library, Tron/Bitcoin streams, BigQuery/Parquet targets, and cursor keying (current line: `@subsquid/pipes@1.0.0-alpha.16`).
+Reference for SDK 1.0+ APIs: time-based ranges, `defineAbi`, query builder shorthands, typed errors, decode-error hooks, the testing library, Tron/Bitcoin streams, BigQuery/Parquet targets, and cursor keying (current line: `@subsquid/pipes@1.0.0-beta.1`, which is also npm `latest`).
+
+## Renamed in the Beta Line
+
+The beta line (and alpha.17+) removed the old aliases and renamed several exports. Old names hard-error on current installs; code written against ≤ alpha.16 needs these renames:
+
+| ≤ alpha.16 | Current | Module |
+|------------|---------|--------|
+| `evmDecoder` | `evmEventDecoder` | `@subsquid/pipes/evm` |
+| `evmPortalSource` (alias) | `evmPortalStream` (only name) | `@subsquid/pipes/evm` |
+| `solanaPortalSource` (alias) | `solanaPortalStream` (only name) | `@subsquid/pipes/solana` |
+| `hyperliquidFillsPortalSource` (alias) | `hyperliquidFillsPortalStream` (only name) | `@subsquid/pipes/hyperliquid` |
+| `evmPortalMockStream` | `mockEvmPortalStream` | `@subsquid/pipes/testing/evm` |
+| `batchForInsert` / `chunk` | `chunkForInsert` | `@subsquid/pipes/targets/drizzle/node-postgres` |
+| `factorySqliteDatabase` / `contractFactoryStore` | `contractFactorySqliteStore` | `@subsquid/pipes/evm` |
+| `SdkError` (enum) | `SdkErrorName` | `@subsquid/pipes` |
+
+Unchanged: `mockBlock`, `encodeEvent`, `resetMockBlockCounter`, `solanaInstructionDecoder`, `contractFactory`, `defineAbi`, all `*Query()` shorthands, all target factories.
 
 ## Time-Based Ranges
 
 Ranges accept ISO date strings and `Date` objects. Dates are auto-resolved to block numbers via the Portal API.
 
 ```typescript
-evmDecoder({
+evmEventDecoder({
   range: { from: '2024-01-01' },  // ISO date → block number
   events: { transfers: erc20.events.Transfer },
 })
 
 // Date objects
-evmDecoder({
+evmEventDecoder({
   range: { from: new Date('2024-01-01'), to: new Date('2024-02-01') },
   events: { ... },
 })
 
 // Formatted block numbers (underscores OK)
-evmDecoder({ range: { from: '18_908_900' }, ... })
+evmEventDecoder({ range: { from: '18_908_900' }, ... })
 
 // Latest block (only for `from`)
-evmDecoder({ range: { from: 'latest' }, ... })
+evmEventDecoder({ range: { from: 'latest' }, ... })
 ```
 
 **Validation:** Inverted ranges (`from > to`) and unresolvable timestamps throw `BlockRangeConfigurationError` (E0002).
@@ -37,7 +54,7 @@ import { defineAbi } from '@subsquid/pipes'
 
 const erc20 = defineAbi(erc20Json)
 
-evmDecoder({
+evmEventDecoder({
   events: {
     transfers: erc20.events.Transfer,
     approvals: erc20.events.Approval,
@@ -144,17 +161,39 @@ Request methods on `BitcoinQueryBuilder`: `addTransaction` (`{inputs, outputs}` 
 ## New EVM Query Fields (alpha.14+)
 
 Added to the EVM field selection:
-- **Block:** `uncles`, `withdrawalsRoot`, `withdrawals`
-- **Transaction:** `logsBloom`, `accessList`
+- **Block:** `uncles`, `withdrawalsRoot`, `withdrawals` (alpha.14+); `blobGasUsed`, `excessBlobGas` (alpha.20+)
+- **Transaction:** `logsBloom`, `accessList` (alpha.14+); EIP-4844 blob fields `blobVersionedHashes`, `blobGasUsed`, `blobGasPrice` (alpha.20+, populated on type-3 transactions)
+
+Portal itself serves a few more columns the SDK schema doesn't type yet (`parentBeaconBlockRoot`, `requestsHash` on blocks; `maxFeePerBlobGas` on transactions). Column availability varies by dataset — `ethereum-mainnet` and `polygon-mainnet` were reindexed from genesis with the full set. alpha.20 also made the decoder tolerant of chains without post-London/post-Cancun fields.
 
 ## Typed Error System
 
-Framework errors carry unique codes linking to docs.
+Framework errors carry unique codes linking to docs (`https://docs.sqd.dev/en/sdk/pipes-sdk/errors/{code}`).
 
 | Error | Code | When |
 |-------|------|------|
 | `DefaultPipeIdError` | E0001 | `.pipeTo()` called without `id` on source |
 | `BlockRangeConfigurationError` | E0002 | Inverted range, invalid date with `'latest'`, unresolvable timestamp |
+| `InstructionDecoderConfigurationError` | E0003 | Solana decoder built with an unusable discriminator set (missing, duplicated, or mixed-width discriminators) |
+
+Configuration errors are E0xxx; target errors are E1xxx–E2xxx (ClickHouse, Postgres, BigQuery, Parquet each own a code block).
+
+## Decode-Error Hook (`onError`)
+
+A decode failure is **fatal by default** — one undecodable record kills the pipe. `evmEventDecoder` and `solanaInstructionDecoder` accept an `onError` hook; if the hook returns without throwing, the offending record is **suppressed** and counted in the `sqd_decode_errors_skipped_total` Prometheus metric (labeled by pipe `id`), so dropped records never vanish silently.
+
+```typescript
+evmEventDecoder({
+  range: { from: 21_000_000 },
+  events: { swaps: pendle.events.SwapYtAndToken },
+  onError: (ctx, error) => {
+    // Old event layout the current ABI can't decode — skip the record, keep the pipe alive
+    ctx.logger.warn({ error }, 'skipping undecodable event')
+  },
+})
+```
+
+Use it for known-bad historical records (e.g. an event whose data layout changed between protocol versions). Don't blanket-suppress: a hook that swallows everything hides real ABI mistakes — the metric only tells you *how many* records were dropped, not *why*.
 
 ## Testing with `@subsquid/pipes/testing/evm`
 
@@ -163,17 +202,17 @@ Test pipe logic end-to-end without hitting a real portal. Requires `vitest` and 
 The library provides:
 - **`encodeEvent`** — encode events with full type inference from viem ABIs
 - **`mockBlock`** — build mock blocks with auto-generated metadata
-- **`evmPortalMockStream`** — spin up a mock portal HTTP server
+- **`mockEvmPortalStream`** — spin up a mock portal HTTP server
 - **`resetMockBlockCounter`** — reset block numbering between tests
 
 ### Basic test setup
 
 ```typescript
-import { commonAbis, evmDecoder, evmPortalStream } from '@subsquid/pipes/evm'
+import { commonAbis, evmEventDecoder, evmPortalStream } from '@subsquid/pipes/evm'
 import {
   type MockPortal,
   encodeEvent,
-  evmPortalMockStream,
+  mockEvmPortalStream,
   mockBlock,
   resetMockBlockCounter,
 } from '@subsquid/pipes/testing/evm'
@@ -218,14 +257,14 @@ it('should decode ERC20 transfers', async () => {
     args: { from: ALICE, to: BOB, value: 1_000_000n },
   })
 
-  portal = await evmPortalMockStream({
+  portal = await mockEvmPortalStream({
     blocks: [mockBlock({ transactions: [{ logs: [transfer] }] })],
   })
 
   const stream = evmPortalStream({
     id: 'test',
     portal: portal.url,
-    outputs: evmDecoder({
+    outputs: evmEventDecoder({
       range: { from: 0, to: 1 },
       events: { transfers: commonAbis.erc20.events.Transfer },
     }),
@@ -248,14 +287,14 @@ it('should test custom transformations', async () => {
     args: { from: ALICE, to: BOB, value: 2_000_000n },
   })
 
-  portal = await evmPortalMockStream({
+  portal = await mockEvmPortalStream({
     blocks: [mockBlock({ transactions: [{ logs: [transfer] }] })],
   })
 
   const stream = evmPortalStream({
     id: 'test',
     portal: portal.url,
-    outputs: evmDecoder({
+    outputs: evmEventDecoder({
       range: { from: 0, to: 1 },
       events: { transfers: commonAbis.erc20.events.Transfer },
     }),
@@ -278,14 +317,14 @@ it('should test custom transformations', async () => {
 
 - `encodeEvent` accepts `abi`, `eventName`, `address`, and typed `args`
 - `mockBlock` auto-generates `number`, `hash`, `timestamp` — call `resetMockBlockCounter()` in `beforeEach`
-- `evmPortalMockStream` returns `{ url, close() }` — use `portal.url` with `evmPortalStream`
+- `mockEvmPortalStream` returns `{ url, close() }` — use `portal.url` with `evmPortalStream`
 - Chain `.pipe()` on the stream to test transformations
 - Multiple event types: pass multiple in `events: { transfers: ..., approvals: ... }` and access `batch.transfers`, `batch.approvals`
 - A parallel Bitcoin testing surface exists at `@subsquid/pipes/testing/bitcoin` (same mock-block / mock-stream shape for the UTXO model)
 
 ## Decoded Event Field Access in `.pipe()`
 
-When using `evmDecoder` with a manual `.pipe()` transform, each decoded event `d` has:
+When using `evmEventDecoder` with a manual `.pipe()` transform, each decoded event `d` has:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -330,7 +369,7 @@ The CLI-generated `enrichEvents` helper divides by 1000 and emits **unix seconds
 
 ## Target Configuration
 
-Available targets: ClickHouse, PostgreSQL (Drizzle), BigQuery, Parquet. (A `memory` target exists in source but is **not** exported from the package in alpha.16 — `createMemoryTarget` is absent from the package exports, so it is internal/testing-only and cannot be imported by consumers.)
+Available targets: ClickHouse, PostgreSQL (Drizzle), BigQuery, Parquet. (A `memory` target exists in source but is **not** exported from the package — still true in `1.0.0-beta.1`: there is no `./targets/memory` export, so `createMemoryTarget` is internal/testing-only and cannot be imported by consumers.)
 
 ### ClickHouse
 
@@ -358,14 +397,14 @@ stream.pipeTo(clickhouseTarget({
 ### PostgreSQL with Drizzle
 
 ```typescript
-import { batchForInsert, drizzleTarget } from '@subsquid/pipes/targets/drizzle/node-postgres'
+import { chunkForInsert, drizzleTarget } from '@subsquid/pipes/targets/drizzle/node-postgres'
 
 stream.pipeTo(drizzleTarget({
   db: drizzle(pool),
   tables: [transfersTable],
   // ONE destructured object; insert via `tx`, NOT `ctx.db`
   onData: async ({ tx, data, ctx }) => {
-    for (const rows of batchForInsert(data.transfers)) {
+    for (const rows of chunkForInsert(data.transfers)) {
       await tx.insert(transfersTable).values(rows)
     }
   },
@@ -379,7 +418,7 @@ stream.pipeTo(drizzleTarget({
 }))
 ```
 
-**Insert via `tx`, not `ctx.db`.** Each `onData` batch runs inside the target's snapshot/rollback transaction, and `tx` is that transaction handle. Writing through `ctx.db` bypasses it, so the rows escape the rollback snapshot and a reorg can't undo them. The callback takes **one** destructured object `{ tx, data, ctx }` — not two positional args. Use `batchForInsert` (alias `chunk`), exported from `@subsquid/pipes/targets/drizzle/node-postgres`, to split large batches under Postgres's 32767-parameter limit.
+**Insert via `tx`, not `ctx.db`.** Each `onData` batch runs inside the target's snapshot/rollback transaction, and `tx` is that transaction handle. Writing through `ctx.db` bypasses it, so the rows escape the rollback snapshot and a reorg can't undo them. The callback takes **one** destructured object `{ tx, data, ctx }` — not two positional args. Use `chunkForInsert` (named `batchForInsert`/`chunk` before the beta line), exported from `@subsquid/pipes/targets/drizzle/node-postgres`, to split large batches under Postgres's 32767-parameter limit.
 
 ### BigQuery (alpha.16)
 
@@ -459,7 +498,7 @@ evmPortalStream({
   id: 'erc20',
   portal: 'https://portal.sqd.dev/datasets/ethereum-mainnet',
   cache: portalSqliteCache({ path: './.portal-cache.sqlite' }), // { path, compress? } — compress defaults true (zstd)
-  outputs: evmDecoder({ /* ... */ }),
+  outputs: evmEventDecoder({ /* ... */ }),
 })
 ```
 

@@ -43,14 +43,14 @@ Consult this documentation when you need to:
 
 #### 4. Topic0-Only Global Filtering
 - Track events across ALL contracts without knowing addresses
-- Omit `contracts` field from `evmDecoder` — filters by topic0 only
+- Omit `contracts` field from `evmEventDecoder` — filters by topic0 only
 - **Use when**: Event signature is unique to the protocol (ReallocateSupply, StrategyReported), factory-deployed contracts where you want all instances
 - **Don't use when**: Event signature is generic (Transfer, Deposit) — too many false positives
 - **Advantage over factory pattern**: Zero cold-start delay, no SQLite database needed, simpler setup
 - **Example**: MetaMorpho vault reallocations (evm/039), Yearn V2 strategy harvests (evm/037)
 
 #### 5. Parallel Event Decoding (multi-output)
-- Decode multiple independent event types via `outputs: { a: evmDecoder(...), b: evmDecoder(...) }`
+- Decode multiple independent event types via `outputs: { a: evmEventDecoder(...), b: evmEventDecoder(...) }`
 - Parallel processing
 - **Use when**: Unrelated events, different contracts
 
@@ -77,7 +77,7 @@ Consult this documentation when you need to:
 
 #### 9. Memory Target (internal / testing only)
 - In-memory storage with rollback handling
-- **Not publicly importable**: `createMemoryTarget` exists in the SDK source but is **not** exported from the published `@subsquid/pipes@alpha` (alpha.16) package — there is no `./targets/memory` export and it is not re-exported from the root index, so application code cannot import it. (The CLI's `memory` sink separately throws `"Memory sink is not supported"`.)
+- **Not publicly importable**: `createMemoryTarget` exists in the SDK source but is **not** exported from the published package (still true in `1.0.0-beta.1`) — there is no `./targets/memory` export and it is not re-exported from the root index, so application code cannot import it. (The beta CLI no longer offers a `memory` sink option at all.)
 - **Use when**: SDK-internal tests only — for a lightweight external option, use a custom target instead
 
 #### 10. RPC Latency Monitoring
@@ -106,21 +106,21 @@ Bitcoin uses the same shape with `bitcoinRpcLatencyWatcher` (polls Bitcoin Core 
 
 ## Critical Error Patterns
 
-### 1. Missing range Parameter in evmDecoder
+### 1. Missing range Parameter in evmEventDecoder
 
 **ERROR**: `TypeError: Cannot read properties of undefined (reading 'from')`
 
-**Cause**: The `range` parameter is **REQUIRED** in `evmDecoder` but was omitted.
+**Cause**: The `range` parameter is **REQUIRED** in `evmEventDecoder` but was omitted.
 
 ```typescript
 // WRONG - Missing range
-evmDecoder({
+evmEventDecoder({
   contracts: [CONTRACT_ADDRESS],
   events: { deposit: abi.events.Deposit },
 })
 
 // CORRECT - Range included
-evmDecoder({
+evmEventDecoder({
   range: { from: 21_000_000 },  // REQUIRED!
   contracts: [CONTRACT_ADDRESS],
   events: { deposit: abi.events.Deposit },
@@ -275,14 +275,14 @@ npm run dev
 
 ```typescript
 // BAD: Fetch all, filter client-side
-evmDecoder({
+evmEventDecoder({
   events: { transfer: commonAbis.erc20.events.Transfer },
 }).pipe((data) => {
   return data.transfer.filter(t => t.event.from === TARGET);
 })
 
 // GOOD: Filter server-side
-evmDecoder({
+evmEventDecoder({
   events: {
     transfer: {
       event: commonAbis.erc20.events.Transfer,
@@ -366,7 +366,7 @@ contracts: [pool1, pool2, pool3, ...]
 **Solution**:
 ```typescript
 // 1. Verify contract address and block range
-evmDecoder({
+evmEventDecoder({
   range: { from: 21_230_000, to: 21_235_000 },
   contracts: [USDC_ADDRESS.toLowerCase()], // Ensure lowercase
   events: { transfer: commonAbis.erc20.events.Transfer },
@@ -500,7 +500,7 @@ npm run dev
 
 ### Issue 11: Proxy Contract Crashes Indexer on Startup
 
-**Symptoms**: Indexer crashes immediately with `TypeError: Cannot read properties of undefined (reading 'topic')` at `evmDecoder`.
+**Symptoms**: Indexer crashes immediately with `TypeError: Cannot read properties of undefined (reading 'topic')` at `evmEventDecoder`.
 
 **Cause**: The contract is behind a proxy (EIP-1967, TransparentUpgradeableProxy, etc.). Both the CLI and `evm-typegen` fetch the proxy ABI, which only contains the `Upgraded` event. The generated `index.ts` references events (e.g., `Supply`, `Borrow`) that don't exist in the proxy ABI.
 
@@ -600,7 +600,7 @@ sqlite3 <project>/*.sqlite "SELECT COUNT(*) FROM factory_contracts" 2>/dev/null 
 - PostgreSQL (use drizzleTarget)
 
 ### Memory Target
-**Not publicly importable in alpha.16** (SDK-internal / testing only — see pattern #9). For a lightweight external store, use a custom target. Characteristics of the internal target:
+**Not publicly importable — still true in 1.0.0-beta.1** (SDK-internal / testing only — see pattern #9). For a lightweight external store, use a custom target. Characteristics of the internal target:
 
 **Use when**:
 - SDK-internal testing
@@ -616,7 +616,7 @@ sqlite3 <project>/*.sqlite "SELECT COUNT(*) FROM factory_contracts" 2>/dev/null 
 
 ### 1. Error Prevention
 
-- Always include `range` in `evmDecoder`
+- Always include `range` in `evmEventDecoder`
 - Always use `.map()` on named event arrays
 - Always include `format: "JSONEachRow"` in ClickHouse inserts
 - Always convert BigInt to string before JSON serialization
@@ -692,14 +692,14 @@ sqlite3 <project>/*.sqlite "SELECT COUNT(*) FROM factory_contracts" 2>/dev/null 
 
 ```typescript
 // Start: Single contract, simple events
-evmDecoder({
+evmEventDecoder({
   range: { from: RECENT_BLOCK },  // Test with recent blocks
   contracts: [CONTRACT],
   events: { transfer: abi.Transfer },
 })
 
 // Scale: Add filtering, expand range
-evmDecoder({
+evmEventDecoder({
   range: { from: DEPLOYMENT_BLOCK },  // Full history
   contracts: [CONTRACT],
   events: {

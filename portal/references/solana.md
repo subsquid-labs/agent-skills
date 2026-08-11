@@ -639,7 +639,7 @@ For liquid staking tokens (jupSOL, dSOL, bSOL), DON'T track SPL Stake Pool instr
 Different programs can share the same d8 for identically-named instructions (e.g., `deposit`). Always combine d8 with programId filter.
 
 ### Concurrent Indexer Rate Limiting
-Portal returns 429 when 3+ Solana indexers run simultaneously. The Pipes SDK retries automatically with backoff, but ETAs increase 2-3x. Limit to 2-3 concurrent Solana indexers for predictable sync times.
+Portal returns `rate_limit_error`/`overloaded` (HTTP 429/529, with a mandatory `Retry-After`) when 3+ Solana indexers run simultaneously. The Pipes SDK retries automatically honoring `Retry-After`, but ETAs increase 2-3x. Limit to 2-3 concurrent Solana indexers for predictable sync times.
 
 ### Scan Speed
 Solana scans at ~200-500 blocks/sec regardless of filter specificity. Plan for:

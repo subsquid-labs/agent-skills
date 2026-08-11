@@ -9,7 +9,7 @@ Import pre-built ABIs for standard token interfaces - no fetching required:
 ```typescript
 import { commonAbis } from "@subsquid/pipes/evm"
 
-// Usage in evmDecoder
+// Usage in evmEventDecoder
 events: {
   transfers: commonAbis.erc20.events.Transfer,    // Transfer(from, to, value)
   approvals: commonAbis.erc20.events.Approval,    // Approval(owner, spender, value)
@@ -170,9 +170,9 @@ import { events } from './contracts/0xProxyAddress.js'
 import { events } from './contracts/0xImplementationAddress.js'
 ```
 
-**Important**: Keep the proxy address in the `contracts` array of `evmDecoder`. Events are emitted from the proxy address but use the implementation's event signatures:
+**Important**: Keep the proxy address in the `contracts` array of `evmEventDecoder`. Events are emitted from the proxy address but use the implementation's event signatures:
 ```typescript
-evmDecoder({
+evmEventDecoder({
   contracts: ['0xProxyAddress'],  // ← proxy address (where events are emitted)
   events: {
     Supply: implementationEvents.Supply,  // ← implementation ABI (event signatures)
