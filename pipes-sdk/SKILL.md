@@ -10,7 +10,7 @@ allowed-tools:
   - Grep
 metadata:
   author: subsquid
-  version: "1.2.0"
+  version: "1.3.0"
   category: core
 ---
 
@@ -52,9 +52,11 @@ Before scaffolding, say why Pipes is the right surface. Portal MCP is best for b
 
 **Node.js:** v22 LTS. `@subsquid/pipes` declares `engines.node >= 22.15.0` (v20 no longer qualifies); v25.x has zstd decompression bugs that crash during large Portal streams. See [ENVIRONMENT_SETUP.md](references/ENVIRONMENT_SETUP.md).
 
-**CLI:** `@subsquid/pipes-cli@1.0.0-alpha.4`. Always use programmatic mode via `--config '{...}'`. **Never create indexer files manually** — that bypasses scaffolding, dependency setup, and configuration.
+**CLI:** `@subsquid/pipes-cli@1.0.0-beta.2`. Always use programmatic mode via `--config '{...}'` (a JSON string or a path to a config file). **Never create indexer files manually** — that bypasses scaffolding, dependency setup, and configuration.
 
-**npm dist-tags (trap):** a bare `npm install @subsquid/pipes` resolves to the pre-1.0 `0.1.0-beta.17` — a different, older API. Manual (non-CLI) setups must install `@subsquid/pipes@alpha` (CLI-scaffolded projects already pin `"@subsquid/pipes": "alpha"`). Keep the explicit `pipes-cli@1.0.0-alpha.4` pin: the CLI's `@latest` is the *older* alpha.1.
+**npm dist-tags:** the SDK is in **1.0.0 beta** — `@subsquid/pipes` `latest` now points to `1.0.0-beta.1`, so a bare `npm install @subsquid/pipes` is correct (the old advice to install `@alpha` is obsolete). The CLI trap remains: `@subsquid/pipes-cli@latest` is still the *old* `1.0.0-alpha.1` — keep the explicit `pipes-cli@1.0.0-beta.2` pin (or use the `beta` dist-tag).
+
+**Beta renamed several SDK exports.** Current names: `evmEventDecoder` (was `evmDecoder`), `mockEvmPortalStream` (was `evmPortalMockStream`), `chunkForInsert` (was `batchForInsert`/`chunk`); the `evmPortalSource`/`solanaPortalSource`/`hyperliquidFillsPortalSource` aliases are gone — only the `*PortalStream` names exist. Projects scaffolded by the old alpha CLI pinned the floating `"alpha"` dist-tag, which now resolves to `1.0.0-alpha.21` (already renamed) — so an old project can break on a fresh `npm install` with `evmDecoder is not a function`/import errors. Fix: rename to the new APIs, or pin the SDK version the code was written for (e.g. `1.0.0-alpha.16`).
 
 ## Known CLI Quirks
 
@@ -88,25 +90,27 @@ See [TEMPLATES.md](references/TEMPLATES.md) for the full catalog: `erc20Transfer
 ### Step 1: Inspect templates (optional)
 
 ```bash
-pnpx @subsquid/pipes-cli@1.0.0-alpha.4 init --schema
+pnpx @subsquid/pipes-cli@1.0.0-beta.2 init --schema
 ```
 
-Shows all template IDs (camelCase!), required params, and sink configs.
+Shows all template IDs (camelCase!), required params, and target configs. The schema is also hosted at `https://cdn.subsquid.io/schemas/pipes_cli_config.json`.
 
 ### Step 2: Generate the project
 
 ```bash
-pnpx @subsquid/pipes-cli@1.0.0-alpha.4 init --config '{
+pnpx @subsquid/pipes-cli@1.0.0-beta.2 init --config '{
   "projectFolder": "/path/to/my-indexer",
   "packageManager": "npm",
   "networkType": "evm",
-  "network": "ethereum-mainnet",
-  "templates": [{"templateId": "erc20Transfers", "params": {"contractAddresses": ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"]}}],
-  "sink": "clickhouse"
+  "defaultNetwork": "ethereum-mainnet",
+  "templates": [{"templateId": "erc20Transfers", "params": {"deployments": [{"address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "range": {"from": "6082465"}}]}}],
+  "target": "clickhouse"
 }'
 ```
 
 Template IDs must be camelCase: `uniswapV3Swaps` (not `uniswap-v3-swaps`), `erc20Transfers` (not `erc20-transfers`).
+
+> **Config keys changed in the beta CLI** (schema is strict — old keys are rejected): `network` → `defaultNetwork`, `sink` → `target`, and `erc20Transfers`/`custom` params are now deployment-based (`deployments: [{address, range}]` instead of `contractAddresses` + top-level `range`). An optional `pipeId` pins the generated pipe's cursor key; it is persisted to `pipes.config.json` so regenerating reuses the same cursor. See [TEMPLATES.md](references/TEMPLATES.md) for per-template params.
 
 ### Step 3: Post-generation checklist
 
@@ -176,6 +180,7 @@ Match the user's symptom to a pattern. Full diagnostics in [TROUBLESHOOTING.md](
 | `heap out of memory` / killed | Batch too large | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-6-memory-issues) |
 | `Table already exists` / type mismatch | Schema drift | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-7-clickhouse-schema-issues) |
 | `ZSTD_error_prefix_unknown` | Node v25+ zstd bug | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-9-nodejs-version-compatibility-issues) |
+| `evmDecoder is not a function` / import not found after reinstall | Floating `"alpha"` pin pulled the renamed beta-line API | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-11-renamed-sdk-exports-after-reinstall) |
 | Hyperliquid validate counts wildly off | SDK vs Portal block batching | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-10-hyperliquid-validation--sdk-vs-portal-block-batching) |
 | `addFill ... reading 'from'` | Missing `range` on `addFill()` | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-10b-hyperliquid-addfill-missing-range) |
 
@@ -193,7 +198,7 @@ The Pipes SDK is feature-rich — a handful of patterns cover 80% of use cases.
 - **Tron & Bitcoin streams**: native query builders and portal streams for `tron-mainnet` and `bitcoin-mainnet` — see [SDK_FEATURES.md](references/SDK_FEATURES.md#tron-portal-streams).
 - **BigQuery & Parquet targets**: `bigqueryTarget` (auto-created partitioned tables, fork-safe DELETEs) and `parquetTarget` (finalized-only rotating files for DuckDB/Spark/Athena) — see [SDK_FEATURES.md](references/SDK_FEATURES.md#target-configuration).
 - **Pipe-id-keyed cursors (alpha.15+)**: targets key sync state by the pipe `id`, so multiple pipes can share one database. Legacy ClickHouse cursors migrate automatically — see [SDK_FEATURES.md](references/SDK_FEATURES.md#cursor-keying--upgrading-to-alpha15).
-- **`evmPortalSource` alias**: CLI-scaffolded `src/index.ts` calls `evmPortalSource(...)`, an exported alias of `evmPortalStream` — same function, no behavioral difference.
+- **Beta rename map**: current names are `evmEventDecoder`, `evmPortalStream`, `solanaPortalStream`, `hyperliquidFillsPortalStream`, `mockEvmPortalStream`, `chunkForInsert`. Code from alpha-era scaffolds may still say `evmDecoder` or `evmPortalSource` (a removed alias of `evmPortalStream`) — see [SDK_FEATURES.md](references/SDK_FEATURES.md#renamed-in-the-beta-line) before "fixing" either spelling.
 - **Portal response cache**: `portalSqliteCache` (from `@subsquid/pipes/portal-cache/node`) caches Portal stream responses on disk (SQLite + zstd) to speed up re-runs and backfills over the same range; wire it via the stream's `cache` option — see [SDK_FEATURES.md](references/SDK_FEATURES.md).
 - **Observability**: Prometheus metrics via `metricsServer()` (`@subsquid/pipes/metrics/node`, stream `metrics` option) and OpenTelemetry tracing via `opentelemetryProfiler()` (`@subsquid/pipes/opentelemetry`, stream `profiler` option) — see [SDK_FEATURES.md](references/SDK_FEATURES.md).
 
