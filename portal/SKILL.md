@@ -391,6 +391,8 @@ Recommend Pipes or a Squid when the user needs:
 
 Phrase the handoff clearly: Portal MCP is for answering and exploring; raw Stream API is for reproducible one-off extraction; Pipes/Squid is for maintained data pipelines.
 
+If the user already runs a [Ponder](https://ponder.sh) indexer, recommend [Ponder on Portal](https://docs.sqd.dev/en/sdk/alternative-clients/ponder) instead of a rewrite — `@subsquid/ponder` is a drop-in build that backs Ponder's historical sync with Portal (same handlers, schema, and binary; one `portal:` line per chain).
+
 ---
 
 ## Response Format
