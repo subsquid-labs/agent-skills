@@ -7,7 +7,7 @@ allowed-tools:
   - WebSearch
 metadata:
   author: subsquid
-  version: "1.4.0"
+  version: "1.5.0"
   category: portal-core
 ---
 
@@ -182,7 +182,7 @@ Dataset: `base-mainnet`
 {
   "type": "solana",
   "fromBlock": 250000000, "toBlock": 250001000,
-  "instructions": [{"programId": ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"], "d8": ["0x5703feb8e7573909"]}],
+  "instructions": [{"programId": ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"], "d8": ["0xc1209b3341d69c81"]}],
   "fields": {"instruction": {"programId": true, "accounts": true, "data": true}}
 }
 ```
@@ -242,14 +242,14 @@ Dataset: `hyperliquid-fills`
 
 ## Working with Time Ranges (Timestamp → Block)
 
-To query a time range like "last 4 hours" or "since yesterday" without guessing blocks, resolve a Unix timestamp (in seconds) to the first block at or after that time:
+To query a time range like "last 4 hours" or "since yesterday" without guessing blocks, resolve a Unix timestamp (in seconds) to a nearby block:
 
 ```
 GET https://portal.sqd.dev/datasets/{dataset}/timestamps/{unix-seconds}/block
 → {"block_number": 25043068}
 ```
 
-**Works for both archived AND real-time data** — resolve timestamps from minutes ago, not just historical ranges. Available on every dataset (EVM, Solana, Substrate, Bitcoin, Tron, Hyperliquid).
+**Works for both archived AND real-time data** — resolve timestamps from minutes ago, not just historical ranges. Available on every dataset (EVM, Solana, Substrate, Bitcoin, Tron, Hyperliquid). Most datasets return the first block at or after the timestamp. Tron resolution is approximate and may return a block roughly 1,000 seconds earlier; a far-future Tron timestamp clamps near the head instead of returning 404. Always inspect the returned block timestamp, widen the range when necessary, and post-filter exact time boundaries.
 
 ### Example: "USDC transfers on Base in the last 4 hours"
 
@@ -268,7 +268,7 @@ TO=$(curl -s https://portal.sqd.dev/datasets/base-mainnet/head | jq -r .number)
 
 Both come back in Portal's structured envelope (see Error Handling below):
 
-- `404` with `"code": "not_found"`, message `"block not in hotblocks"` — timestamp is in the future, or beyond the dataset head
+- `404` with `"code": "not_found"`, message `"block not in hotblocks"` — timestamp is in the future, or beyond the dataset head on datasets that do not clamp (Tron is the documented exception)
 - `404` with `"code": "unknown_dataset"` — wrong dataset name (see Step 1)
 
 > **Don't estimate blocks from `(now - ts) / block_time`** — block times vary and the result drifts by hundreds of blocks. Use this endpoint instead.
@@ -419,11 +419,13 @@ Every Portal error — any endpoint, any data source — uses one envelope:
 {"error": {"type": "rate_limit_error", "code": "overloaded", "message": "...", "param": "...", "request_id": "..."}}
 ```
 
-**Branch on `type`** (closed set of four), **match on `code`** for specific cases, and never parse `message` (prose, not stable). Every response carries an `x-request-id` header — quote it when reporting problems.
+**Branch on `type`**, **match on `code`** for specific cases, and never parse `message` (prose, not stable). The public Portal normally exposes four operational types; protected Portal deployments add two credential types. Every response carries an `x-request-id` header — quote it when reporting problems.
 
 | `type` | Retry? | Key codes |
 |---|---|---|
 | `invalid_request_error` | No — fix the request | `malformed_request` (400), `unknown_dataset` (404), `not_found` (404), `base_block_mismatch` (409) |
+| `authentication_error` | No — present a valid credential | `missing_credential`, `invalid_credential`, `revoked_credential`, `expired_credential` (403) |
+| `permission_error` | No — use a credential with the required scope | `portal_not_allowed`, `dataset_not_allowed` (403) |
 | `rate_limit_error` | Yes, after `Retry-After` (mandatory, seconds) | `overloaded` (529, proxied 429/529) |
 | `availability_error` | Yes, with backoff | `no_workers`, `retries_exhausted` (503), `upstream_unavailable` (502) |
 | `api_error` | No — report with `request_id` | `internal_error`, `worker_failure` (500), `unclassified` |

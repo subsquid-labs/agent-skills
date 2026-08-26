@@ -68,20 +68,16 @@ If indexer is currently running:
 **Implementation**:
 ```typescript
 // Before: Full history from token deployment
-range: { from: '6,082,465' }  // USDC deployment (2018)
+range: { from: 6_082_465 }  // USDC deployment (2018)
 
-// After: Recent data only
-range: { from: '20,000,000' }  // Last 6 months
+// After: Pin the calendar boundary the user actually needs
+range: { from: process.env.START_DATE! }  // Resolve once, then set YYYY-MM-DD
 ```
 
-**Impact**:
-- Reduces 14M blocks to 4M blocks
-- Sync time: 60 min → 5-10 min (85% faster)
-
 **Guidance**:
-- Last 2 weeks: Use `fromBlock: 21,000,000` (1-5 min)
-- Last 6 months: Use `fromBlock: 19,000,000` (10-30 min)
-- Last year: Use `fromBlock: 17,000,000` (20-40 min)
+- Ask for the required calendar window, resolve it through Portal, and pin the resulting ISO date or block before deployment.
+- Never label a fixed block as "last two weeks" or "last six months"; those statements become wrong as the chain advances.
+- Estimate sync time from the resolved block count and an observed rate from the first bounded run.
 
 ### Strategy 2: Reduce Contract List
 
@@ -144,7 +140,7 @@ contracts: [
 ```typescript
 // Before: Client-side filtering (fetch all, filter locally)
 evmEventDecoder({
-  range: { from: 21_000_000 },
+  range: { from: process.env.START_DATE! },
   events: { transfer: commonAbis.erc20.events.Transfer },
 }).pipe((data) => ({
   transfer: data.transfer.filter(t => t.event.from === ADDRESS),
@@ -152,7 +148,7 @@ evmEventDecoder({
 
 // After: Server-side filtering (only fetch relevant)
 evmEventDecoder({
-  range: { from: 21_000_000 },
+  range: { from: process.env.START_DATE! },
   events: {
     transfer: {
       event: commonAbis.erc20.events.Transfer,
@@ -176,14 +172,20 @@ evmEventDecoder({
 
 **Example**:
 ```typescript
-// Phase 1: Test (5 seconds)
-range: { from: '21,000,000', to: '21,005,000' }
+// Resolve a current bounded range first; do not copy a historical "recent" block.
+const TEST_START_BLOCK = Number(process.env.TEST_START_BLOCK)
+if (!Number.isSafeInteger(TEST_START_BLOCK)) {
+  throw new Error('Set TEST_START_BLOCK to a resolved block number')
+}
 
-// Phase 2: Validate (2 minutes)
-range: { from: '21,000,000', to: '21,100,000' }
+// Phase 1: Test 5,000 blocks
+range: { from: TEST_START_BLOCK, to: TEST_START_BLOCK + 5_000 }
 
-// Phase 3: Production (10 minutes)
-range: { from: '20,000,000' }
+// Phase 2: Validate 100,000 blocks
+range: { from: TEST_START_BLOCK, to: TEST_START_BLOCK + 100_000 }
+
+// Phase 3: Pin the required production boundary as an ISO date or resolved block
+range: { from: process.env.START_DATE! }
 ```
 
 ## Monitoring Running Indexers
@@ -206,15 +208,7 @@ Look for:
 
 ## Performance Benchmarks
 
-Share these real-world benchmarks:
-
-| Indexer | Pattern | Blocks | Speed | Time |
-|---------|---------|--------|-------|------|
-| **USDC swaps** | Factory (Uniswap V3) | 12M | 8-12k/sec | 15-20 min |
-| **Vitalik transfers** | Address filtering | 7.3M | 9-13k/sec | 10-15 min |
-| **All Uniswap pools** | Factory pattern | 12M | 8-12k/sec | 30-60 min |
-
-**Key Insight**: Address filtering is NOT slower in blocks/sec, but requires processing more events to find matches.
+Measure the user's actual pipeline over a pinned range. Record the package version, dataset, exact `from`/`to`, contract/filter count, target, rows written, elapsed time, and observed blocks/sec. Do not present historical rates as current estimates: Portal load, event density, transforms, and sink latency all change the result.
 
 ## Optimization Workflow
 
@@ -251,33 +245,31 @@ Provide clear analysis:
 ## Performance Analysis
 
 Current Configuration:
-- Start block: 6,082,465 (USDC deployment, 2018)
-- Total blocks: ~18M blocks
-- Estimated sync time: 60-90 minutes
+- Required boundary: <ISO date or resolved block>
+- Current head: <observed block>
+- Total blocks: <calculated range>
+- Observed rate from bounded test: <blocks/sec>
 
 Bottlenecks Identified:
-Start block is unnecessarily old
-Contract filtering is efficient
-No address filtering
+<Evidence from the bounded run>
 
 Recommended Optimizations:
-1. Adjust start block to 20,000,000 (last 6 months)
-   - Reduces to 4M blocks
-   - New sync time: 5-10 minutes
-   - **85% faster**
+1. Pin the earliest date/block the user actually requires
+   - Blocks removed: <calculated>
+   - Estimated time from observed rate: <calculated>
 
-2. Keep current contract list (efficient)
+2. Keep or reduce the contract/filter set based on measured event density
 
 3. Test with small range first:
-   range: { from: 21,000,000, to: 21,010,000 }
+   range: { from: TEST_START_BLOCK, to: TEST_START_BLOCK + 10_000 }
 
 Implementation:
 [Show exact code changes]
 
 Expected Results:
-Before: 60-90 minutes
-After: 5-10 minutes
-Improvement: 85% faster
+Before: <measured or calculated>
+After: <calculated from the same observed rate>
+Improvement: <calculated percentage>
 ```
 
 ## When to NOT Optimize

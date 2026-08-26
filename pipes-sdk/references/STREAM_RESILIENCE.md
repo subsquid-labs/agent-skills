@@ -170,9 +170,9 @@ The Pipes SDK writes a sync cursor to `{database}.sync` after each batch commit,
 1. SDK reads `sync` table → finds the last committed block for this pipe `id`
 2. Logs `"Resuming indexing from X block"`
 3. Requests Portal data from block X onward
-4. No duplicate data (CollapsingMergeTree deduplicates via `sign` column)
+4. Calls the target's `onRollback({ reason: 'recovery', safeCursor, store })` hook so rows written past the saved cursor can be removed before replay
 
-The remaining risk is a corrupted sync table, or two pipes sharing the same `id` and database. Keep one database per project and don't rename a pipe's `id` casually — the cursor is keyed by it, so a rename orphans the old cursor and the pipe re-syncs from its range start.
+`CollapsingMergeTree(sign)` does not deduplicate two identical `sign = 1` rows. Persistent ClickHouse targets therefore need an `onRollback` handler that removes rows above `safeCursor`; without it, an unclean restart can replay duplicates and a hot-stream fork is refused. The remaining risks include a corrupted sync table or two pipes sharing the same `id` and database. Keep one database per project and don't rename a pipe's `id` casually — the cursor is keyed by it, so a rename orphans the old cursor and the pipe re-syncs from its range start.
 
 ## Diagnosing Repeated Crashes
 
@@ -188,11 +188,8 @@ grep "Resuming" /tmp/my-indexer.log | tail -3
 
 If it always resumes from the same block and crashes:
 - The data at that block may be malformed
-- Try skipping ahead: update the sync table manually (the row `id` is your pipe's `id`; legacy pre-alpha.15 projects used `'stream'`)
-  ```sql
-  ALTER TABLE my_db.sync UPDATE cursor = '{"block": NEXT_BLOCK}' WHERE id = '<pipe-id>'
-  ```
-- Or drop sync and restart from a later block by changing `range.from` in source config
+- Do not hand-edit cursor columns. Current state is split across `current`, `finalized`, and `rollback_chain`; changing only one can corrupt recovery.
+- Fix or explicitly exclude the malformed data, then restart. If the user deliberately abandons the old range, use a new pipe id and a new/cleared data target, or reset only the confirmed cursor row after backing up the database.
 
 ## Related
 

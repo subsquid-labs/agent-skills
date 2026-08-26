@@ -6,7 +6,7 @@ Portal has no version in its URL or headers. Every client talks to the same surf
 
 - Endpoint paths and HTTP methods
 - Accepted field names in selectors
-- The structured error envelope and its closed set of four `error.type` values
+- The structured error envelope and documented `error.type` values, including credential errors on protected deployments
 - Published `error.code` values
 
 The surface grows by addition: new fields, dataset families, and datasets can appear without changing what an existing request means.
@@ -21,6 +21,6 @@ Never parse `error.message` or depend on the order of `GET /datasets`. Treat an 
 
 ## Automated Change Detection
 
-Diff the machine-readable [Portal OpenAPI specification](https://docs.sqd.dev/openapi.json) or regenerate clients from it. Operations have stable `operationId` values, and selectors are enumerated per dataset family.
+Use the generic [Portal OpenAPI specification](https://docs.sqd.dev/openapi.json) for shared endpoints and stable `operationId` values. Its generic query object intentionally leaves family selectors open, so use the family-specific specifications for client generation and selector validation: [EVM](https://docs.sqd.dev/en/ai/evm-openapi), [Solana](https://docs.sqd.dev/en/ai/solana-openapi), [Substrate](https://docs.sqd.dev/en/ai/substrate-openapi), [Bitcoin](https://docs.sqd.dev/en/ai/bitcoin-openapi), [Tron](https://docs.sqd.dev/en/ai/tron-openapi), and [Hyperliquid](https://docs.sqd.dev/en/ai/hyperliquid-openapi).
 
 Watch [Announcements](https://docs.sqd.dev/announcements) for dataset retirements. Treat `unknown_dataset` as fatal for that dataset, and check announced retirements before assuming a catalog entry is actively ingesting.

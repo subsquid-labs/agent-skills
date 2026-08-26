@@ -10,7 +10,7 @@ allowed-tools:
   - Grep
 metadata:
   author: subsquid
-  version: "1.4.0"
+  version: "1.5.0"
   category: core
 ---
 
@@ -52,7 +52,7 @@ Before scaffolding, say why Pipes is the right surface. Portal MCP is best for b
 
 **Node.js:** v22 LTS. `@subsquid/pipes` declares `engines.node >= 22.15.0` (v20 no longer qualifies); v25.x has zstd decompression bugs that crash during large Portal streams. See [ENVIRONMENT_SETUP.md](references/ENVIRONMENT_SETUP.md).
 
-**CLI:** `@subsquid/pipes-cli@1.0.0-beta.2`. Always use programmatic mode via `--config '{...}'` (a JSON string or a path to a config file). **Never create indexer files manually** — that bypasses scaffolding, dependency setup, and configuration.
+**CLI:** `@subsquid/pipes-cli@1.0.0-beta.2`. For CLI-supported EVM and SVM projects, always use programmatic mode via `--config '{...}'` (a JSON string or a path to a config file) instead of writing the generated scaffold by hand. Tron, Bitcoin, and Hyperliquid have no CLI templates; use the reviewed manual patterns linked below.
 
 **npm dist-tags (verified 2026-08-26):** the SDK is in **1.0.0 beta**. `@subsquid/pipes@latest` and the CLI-generated `^1.0.0-beta.1` range install `1.0.0-beta.3`, while `@subsquid/pipes@beta` is `1.0.0-beta.4`. Pin beta.4 explicitly when using its Pub/Sub signals or lag metrics. The CLI trap remains: `@subsquid/pipes-cli@latest` is still the old `1.0.0-alpha.1`; keep the explicit `pipes-cli@1.0.0-beta.2` pin (or use its `beta` dist-tag). Recheck tags with `npm view @subsquid/pipes dist-tags --json` before changing pins.
 
@@ -157,10 +157,12 @@ Verify the first log line shows your intended start block. If it says `Resuming 
 | Scenario | Action |
 |----------|--------|
 | Indexer crashed mid-sync, want to continue | Keep it — verify X is near where it stopped |
-| Changed start block or contract address | Drop sync (`DROP TABLE IF EXISTS <db>.sync`) |
-| Different indexer on same database | Drop sync OR use a separate database |
-| Brand new project, first run | Drop sync — shouldn't exist |
-| Re-index from scratch | Drop sync + data tables |
+| Changed start block or contract address | Clear this pipe's data and reset only its confirmed cursor row |
+| Different indexer on same database | Give it a unique pipe `id`/target cursor key, or use a separate database |
+| Brand new project, first run | Inspect unexpected cursor ids before changing anything |
+| Re-index from scratch | Clear this pipe's data tables and its confirmed cursor row |
+
+Current targets key cursor rows by the source pipe `id` (or an explicit target `settings.id`). On a shared database, never drop the whole `sync` table to reset one pipe. Inspect it first with `SELECT id, current, finalized FROM <db>.sync`, confirm the id, then delete only that row. Reserve `DROP TABLE <db>.sync` for a database proven to be exclusive to the one pipe being reset.
 
 Full deployment (local Docker, ClickHouse Cloud, Railway) in [DEPLOYMENT.md](references/DEPLOYMENT.md).
 
@@ -221,7 +223,7 @@ Full benchmarks and tuning in [PERFORMANCE.md](references/PERFORMANCE.md).
 - Contract count: fewer = faster
 
 **Quick testing strategy:**
-1. Start with recent blocks (`range.from: '21,000,000'`)
+1. Resolve the intended recent date and pin it as an ISO date in `range.from` (for example, the date seven days before the test)
 2. Limit to 1–3 contracts first
 3. Expand once working
 

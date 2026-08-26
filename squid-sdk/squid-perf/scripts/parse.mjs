@@ -28,11 +28,11 @@ import fs from "node:fs";
 import readline from "node:readline";
 import path from "node:path";
 
-const PARSER_VERSION = 2;
+const PARSER_VERSION = 3;
 
 // Line shape:  <service> <ISO-TS>Z <LEVEL> <logger> <message...>
 const LINE_RX =
-  /^(\S+)\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s+(INFO|WARN|ERROR|DEBUG|TRACE|FATAL)\s+(\S+)\s+(.*)$/;
+  /^(\S+)\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s+(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|CRITICAL|FATAL)\s+(\S+)\s+(.*)$/;
 
 // `sqd logs` emits ANSI color escape codes (\x1b[NNm). Strip them before matching.
 const ANSI_RX = /\x1b\[[0-9;]*m/g;
@@ -47,6 +47,8 @@ const PROGRESS_LOGGERS = new Set([
   "sqd:batch-processor",
   "sqd:source-processor",
 ]);
+
+const ERROR_LEVELS = new Set(["WARN", "WARNING", "ERROR", "CRITICAL", "FATAL"]);
 
 // Multicall: "processed loadOnchainMarketsInfo 454805261 at block 454805261: 131 chunks, 130 groups, 10010 total calls, 4536ms"
 const MULTICALL_RX =
@@ -146,6 +148,16 @@ async function main() {
     if (svc.firstTsMs === null || tsMs < svc.firstTsMs) svc.firstTsMs = tsMs;
     if (svc.lastTsMs  === null || tsMs > svc.lastTsMs)  svc.lastTsMs  = tsMs;
 
+    const isErrorLevel = ERROR_LEVELS.has(level);
+    if (isErrorLevel && svc.errors.length < MAX_ERRORS_PER_SERVICE) {
+      svc.errors.push({
+        tsMs,
+        level,
+        logger,
+        message: message.length > 500 ? message.slice(0, 500) + "…" : message,
+      });
+    }
+
     if (PROGRESS_LOGGERS.has(logger)) {
       if (!svc.loggerFamily) svc.loggerFamily = logger;
       const pm = message.match(PROGRESS_RX);
@@ -177,16 +189,7 @@ async function main() {
           latencyMs: parseInt(mm[7], 10),
         });
       }
-    } else if (level === "ERROR" || level === "WARN" || level === "FATAL") {
-      if (svc.errors.length < MAX_ERRORS_PER_SERVICE) {
-        svc.errors.push({
-          tsMs,
-          level,
-          logger,
-          message: message.length > 500 ? message.slice(0, 500) + "…" : message,
-        });
-      }
-    } else {
+    } else if (!isErrorLevel) {
       // Tier-3: any non-progress, non-multicall, non-error INFO line.
       let t3 = svc.tier3.get(logger);
       if (!t3) {
@@ -210,6 +213,10 @@ async function main() {
 
   const now = Date.now();
   const live = latestTs != null && (now - latestTs) < 60_000;
+
+  if (parsedLines === 0) {
+    throw new Error(`no recognizable SQD log lines in ${input}`);
+  }
 
   const out = {
     meta: {
@@ -258,7 +265,7 @@ async function main() {
     out.services[name] = {
       name,
       loggerFamily: svc.loggerFamily,
-      firstBlock: svc.firstBlock,
+      firstBlock: progressCount ? svc.progressRows[0][1] : null,
       lastBlock: svc.lastBlock,
       firstTsMs: svc.firstTsMs,
       lastTsMs:  svc.lastTsMs,

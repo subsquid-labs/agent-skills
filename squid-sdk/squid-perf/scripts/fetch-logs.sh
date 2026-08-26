@@ -13,7 +13,7 @@
 #   - Retries 3× with 10s backoff on failure.
 #   - Exits 0 on success, non-zero on permanent failure (with error on stderr).
 
-set -u
+set -euo pipefail
 
 REF="${1:-}"
 SINCE="${2:-}"
@@ -47,6 +47,19 @@ MAX_ATTEMPTS="${SQD_PERF_MAX_ATTEMPTS:-3}"
 BACKOFF_SEC="${SQD_PERF_BACKOFF:-10}"
 EXPECT_TIMEOUT="${SQD_PERF_EXPECT_TIMEOUT:-600}"   # per-page wait, seconds
 
+has_recognizable_log_line() {
+  # `expect` allocates a PTY, so the CLI may colorize individual fields. Strip
+  # ANSI SGR sequences line-by-line before checking the current log shape.
+  awk '
+    BEGIN { esc = sprintf("%c", 27) }
+    {
+      gsub(esc "\\[[0-9;]*m", "")
+      if ($0 ~ /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[^[:space:]]+Z[[:space:]]+(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|CRITICAL|FATAL)[[:space:]]+/) found = 1
+    }
+    END { exit found ? 0 : 1 }
+  ' "$1"
+}
+
 attempt=1
 while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
   printf "fetch-logs [%s] attempt %d/%d — since=%s\n" "$REF" "$attempt" "$MAX_ATTEMPTS" "$SINCE" >&2
@@ -57,7 +70,7 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
   #  - Spawns sqd logs, paginates by sending "it\r" whenever CLI prompts.
   #  - Breaks on EOF (all pages fetched) or timeout (stuck).
   #  - log_user 1 so output streams to stdout -> captured to $PARTIAL.
-  expect -c "
+  if expect -c "
     set timeout ${EXPECT_TIMEOUT}
     log_user 1
     spawn -noecho sqd logs -r {$REF} --pageSize ${PAGE_SIZE} --since {$SINCE}
@@ -74,16 +87,25 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
       }
     }
     catch {close}
-    catch {wait}
-  " > "$PARTIAL" 2> "${PARTIAL}.err"
+    set wait_rc [catch {wait} wait_result]
+    if {\$wait_rc != 0} { exit 1 }
+    if {[lindex \$wait_result 2] != 0} { exit 1 }
+    set child_rc [lindex \$wait_result 3]
+    if {\$child_rc != 0} { exit \$child_rc }
+    exit 0
+  " > "$PARTIAL" 2> "${PARTIAL}.err"; then
+    rc=0
+  else
+    rc=$?
+  fi
 
-  rc=$?
-
-  # Heuristic for success: exit ok AND file has content AND doesn't look like only auth/error output.
+  # Heuristic for success: exit ok, enough content, at least one recognizable
+  # Cloud log line, and no obvious auth/error-only response.
   line_count=$(wc -l < "$PARTIAL" 2>/dev/null | tr -d ' ')
   line_count="${line_count:-0}"
 
   if [ "$rc" -eq 0 ] && [ "$line_count" -gt 5 ] \
+     && has_recognizable_log_line "$PARTIAL" \
      && ! grep -qE '^(Error|error:|ERR_|Not authorized|Unauthenticated|please run.*auth)' "$PARTIAL"; then
     # success path — atomic rename + sentinel
     mv -f "$PARTIAL" "$OUT_PATH"

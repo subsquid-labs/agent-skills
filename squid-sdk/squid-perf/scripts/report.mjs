@@ -933,19 +933,21 @@ function mapServiceForReport(s, breakpointsOverride) {
 
   const tier2 = {};
   for (const [label, d] of Object.entries(s.perDeployment)) {
+    const warningCount = (d?.errors || []).filter(e => e.level === "WARN" || e.level === "WARNING").length;
+    const errorCount = (d?.errors || []).filter(e => e.level === "ERROR" || e.level === "CRITICAL" || e.level === "FATAL").length;
     if (!d || d.nonSync) {
       tier2[label] = {
         restarts: 0,
-        errors: d?.errorCount || 0,
-        warns: 0,
+        errors: errorCount,
+        warns: warningCount,
       };
       continue;
     }
     const latencies = (d.multicall || []).map(m => m.latencyMs).filter(x => x != null);
     const entry = {
       restarts: (d.restarts || []).length,
-      errors: d.errorCount || 0,
-      warns: 0,
+      errors: errorCount,
+      warns: warningCount,
     };
     if (latencies.length > 0) {
       entry.multicallP95Ms = percentile(latencies, 0.95);
@@ -1325,6 +1327,11 @@ async function main() {
   if (parsedFiles.length === 0) throw new Error(`no parsed/*.json in ${parsedDir}`);
   const parsed = parsedFiles
     .map(f => JSON.parse(fs.readFileSync(path.join(parsedDir, f), "utf8")));
+
+  const hasProgress = parsed.some(p =>
+    Object.values(p.services || {}).some(service => service.progressCount > 0)
+  );
+  if (!hasProgress) throw new Error(`no parsed deployment contains processor progress data in ${parsedDir}`);
 
   // Sort parsed to match the order of indexers in config.
   const orderByLabel = new Map(config.indexers.map((i, idx) => [i.label, idx]));

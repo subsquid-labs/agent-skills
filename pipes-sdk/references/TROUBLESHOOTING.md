@@ -141,7 +141,7 @@ See [ABI_GUIDE.md](ABI_GUIDE.md) for the full proxy handling guide, including no
    docker exec <container> clickhouse-client --password <pw> \
      --query "SELECT * FROM <database>.sync FORMAT Vertical"
    ```
-   Fix: use a separate database per indexer, or drop the sync table.
+   Fix: use a separate database per indexer. If sharing is deliberate, confirm the pipe id and delete only that cursor row; never drop a shared `sync` table.
 
 ## Error Pattern 5b: Factory Indexer Shows Zero Data
 
@@ -211,10 +211,10 @@ Error: Cannot insert NULL into NOT NULL column
      --query "DROP TABLE IF EXISTS pipes.table_name"
    ```
 2. Verify schema matches data types (addresses = String, amounts = Float64, block numbers = UInt64, timestamps = DateTime(3))
-3. Clear sync for fresh start:
+3. Clear the affected pipe's data and confirmed cursor row for a fresh start:
    ```bash
    docker exec clickhouse clickhouse-client --password=default \
-     --query "DROP TABLE IF EXISTS pipes.sync"
+     --query "ALTER TABLE pipes.sync DELETE WHERE id = '<confirmed-pipe-id>' SETTINGS mutations_sync=1"
    ```
 
 ## Error Pattern 8: Process Crashed / Indexer Died Mid-Sync
@@ -253,7 +253,7 @@ nvm install 22 && nvm use 22
 
 **Hyperliquid-specific:** v25 crashes are especially common during large fills syncs (50M+ blocks). Checkpoint/resume works reliably — let it crash and restart until sync completes.
 
-**Prevention:** always use Node.js LTS (v20 or v22).
+**Prevention:** use Node.js 22 LTS at version 22.15.0 or later. Node 20 does not satisfy the current package engine.
 
 ## Error Pattern 10: Hyperliquid Validation — SDK vs Portal Block Batching
 

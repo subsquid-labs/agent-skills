@@ -54,6 +54,7 @@ CLICKHOUSE_PASSWORD=default
 ```sql
 CREATE TABLE IF NOT EXISTS hl_fills (
     block_number UInt64,
+    fill_index UInt64,
     timestamp DateTime64(3, 'UTC'),
     user LowCardinality(String),
     coin LowCardinality(String),
@@ -69,7 +70,7 @@ CREATE TABLE IF NOT EXISTS hl_fills (
     notional Float64,
     sign Int8
 ) ENGINE = CollapsingMergeTree(sign)
-ORDER BY (coin, block_number, user, dir)
+ORDER BY (block_number, fill_index)
 PARTITION BY toYYYYMM(timestamp);
 ```
 
@@ -97,6 +98,7 @@ const output = hyperliquidFillsQuery()
   .addFields({
     block: { number: true, timestamp: true },
     fill: {
+      fillIndex: true,
       user: true,
       coin: true,
       px: true,
@@ -116,12 +118,13 @@ const output = hyperliquidFillsQuery()
     const fills = blocks.flatMap((block) =>
       block.fills.map((fill) => ({
         block_number: block.header.number,
+        fill_index: fill.fillIndex,
         timestamp: new Date(block.header.timestamp).toISOString(),
         user: fill.user,
         coin: fill.coin,
         px: fill.px,
         sz: fill.sz,
-        side: fill.side === 'B' ? 'Buy' : 'Sell',
+        side: fill.side === 'B' ? 'Bid' : 'Ask',
         dir: fill.dir,
         closed_pnl: fill.closedPnl,
         fee: fill.fee,
@@ -138,7 +141,10 @@ const output = hyperliquidFillsQuery()
 export async function main() {
   await hyperliquidFillsPortalStream({
     id: 'hl-perps-fills',
-    portal: 'https://portal.sqd.dev/datasets/hyperliquid-fills',
+    portal: {
+      url: 'https://portal.sqd.dev/datasets/hyperliquid-fills',
+      finalized: true,
+    },
     outputs: output,
   })
     .pipeTo(
@@ -250,7 +256,8 @@ All numeric values are native JavaScript `number` (float64), NOT BigInt:
 | `closedPnl` | number | Realized PnL (0 for opens, negative = loss) |
 | `fee` | number | Fee (negative = maker rebate) |
 | `startPosition` | number | Position before this fill |
-| `side` | `'B' \| 'S'` | Buy or Sell |
+| `fillIndex` | number | Stable row index within the block; identify rows by `(block.number, fillIndex)` |
+| `side` | `'B' \| 'A'` | Bid-side or ask-side fill |
 | `dir` | string | "Open Long", "Close Long", "Open Short", "Close Short", "Long > Short", "Short > Long", "Net Child Vaults" |
 | `crossed` | boolean | true = taker (market order) |
 
@@ -280,7 +287,7 @@ const query = hyperliquidFillsQuery()
   .addFillRequest({ range: { from: 920000000 }, request: { user: WHALES } })
 ```
 
-**Tested result:** 894K fills for 5 whales in ~60 seconds. Top whale had $1.19B volume and -$1.47M PnL.
+Run this over a pinned `from`/`to` range and record the observed fill count, all-fill notional, and elapsed time before making performance claims.
 
 ### Two-Phase Whale Discovery Workflow
 
@@ -296,8 +303,7 @@ Whale addresses aren't known upfront — you discover them from trading data. Th
      count() as fills,
      round(sum(notional)/1e6, 0) as volume_M,
      round(sum(closed_pnl), 0) as pnl
-   FROM hl_fills
-   WHERE sign = 1
+   FROM hl_fills FINAL
    GROUP BY user
    ORDER BY volume_M DESC
    LIMIT 20
@@ -331,7 +337,7 @@ const query = hyperliquidFillsQuery()
   .addFillRequest({ range: { from: 924000000 }, request: { coin: COINS } })
 ```
 
-**Tested result:** 2.35M fills for 9 coins in ~60 seconds. BTC dominated with $2.64B, HYPE had $368M.
+Benchmark this over a pinned `from`/`to` range. Coin activity and the real-time head change continuously, so an open-ended historical count is not reproducible.
 
 **Tip:** You can omit fields you don't need (e.g., `user`, `startPosition`, `feeToken`) from `.addFields()` to reduce data transfer and storage. Only request what your use case requires.
 
@@ -353,7 +359,7 @@ Hyperliquid uses **uppercase symbol names** as coin identifiers. Common tickers 
 
 **To discover all available coins**, run a broad query without coin filters and aggregate:
 ```sql
-SELECT coin, count() as fills FROM hl_fills GROUP BY coin ORDER BY fills DESC
+SELECT coin, count() as fills FROM hl_fills FINAL GROUP BY coin ORDER BY fills DESC
 ```
 
 ## TradFi Asset Classification
@@ -469,38 +475,28 @@ For EVM indexers the divisor is not a fixed rule either: it depends on the Click
 
 Hyperliquid fills don't use `evmEventDecoder`. Call `.build().pipe(...)` on the query output; the transform receives `Block[]` where each block has `header` and `fills`. Pass that chain as the stream's `outputs`. Source-level `.pipe()` no longer exists in the beta API.
 
-### 4. Portal URL includes the dataset name
+### 4. Persistent targets use the finalized stream
 
 ```typescript
 // CORRECT
-portal: 'https://portal.sqd.dev/datasets/hyperliquid-fills'
+portal: {
+  url: 'https://portal.sqd.dev/datasets/hyperliquid-fills',
+  finalized: true,
+}
 
 // WRONG (just the portal root)
 portal: 'https://portal.sqd.dev'
 ```
 
+Hyperliquid block hashes are all zero, so a persistent target cannot recover a hot-stream fork safely. Use `finalized: true` for ClickHouse and other durable sinks.
+
 ### 5. Side codes are single characters
 
-`'B'` for buy, `'S'` for sell — not `'buy'`/`'sell'` or `'Buy'`/`'Sell'`. The pipe transform typically maps these to human-readable strings (`'Buy'`/`'Sell'`) before inserting into ClickHouse, so your SQL queries should use the mapped values (e.g., `WHERE side = 'Buy'`), not the raw codes.
+`'B'` is the bid-side fill and `'A'` is the ask-side fill. The example maps these to `Bid` and `Ask` before inserting into ClickHouse. Each trade appears as two fills (one per side), so market-wide volume over all fills must divide notional by two or filter to one side. Per-user volume should retain that user's own fills.
 
 ## Performance
 
-### Benchmark: BTC + ETH + SOL fills (block 920M to real-time)
-- **5M fills** indexed in ~70 seconds
-- **$18.4B notional volume** captured
-- Ingestion rate: ~70K blocks/second
-
-### Benchmark: Whale tracker (5 addresses, all coins)
-- **894K fills** indexed in ~60 seconds
-- **$3B+ total whale volume** captured
-- User filter efficiently narrows to specific addresses
-
-### Benchmark: Multi-coin tracker (9 coins, block 924M)
-- **2.35M fills** indexed in ~60 seconds
-- **$5B+ total volume** across BTC, ETH, SOL, HYPE, DOGE, WIF, ARB, SUI, AVAX
-
-### Running multiple indexers
-Multiple Hyperliquid indexers can run simultaneously without issues — each with its own ClickHouse database. Tested 2 indexers (whale + multi-coin) running in parallel with no performance degradation.
+Benchmark the exact query and sink over a pinned block range. Report package version, `from`/`to`, filter count, fills, elapsed time, and observed blocks/sec. Label `sum(notional)` as all-fill notional; divide it by two (or select one side) before calling it market volume. Give concurrent indexers separate databases and measure them together before claiming there is no contention.
 
 ## Example Queries
 
@@ -510,23 +506,22 @@ SELECT
   toDate(timestamp) as day,
   coin,
   count() as fills,
-  round(sum(notional)/1e6, 1) as volume_M
-FROM hl_fills
-WHERE sign = 1
+  round(sum(notional)/2e6, 1) as volume_M  -- two fills per trade
+FROM hl_fills FINAL
 GROUP BY day, coin
 ORDER BY day, volume_M DESC
 ```
 
 ### Long vs Short breakdown
 ```sql
+-- These are participant-side activity totals. Adding all directions double-counts market volume.
 SELECT
   coin,
   dir,
   count() as fills,
   round(sum(notional)/1e6, 1) as volume_M,
   round(sum(closed_pnl), 0) as pnl
-FROM hl_fills
-WHERE sign = 1
+FROM hl_fills FINAL
 GROUP BY coin, dir
 ORDER BY coin, volume_M DESC
 ```
@@ -538,8 +533,7 @@ SELECT
   count() as fills,
   round(sum(notional)/1e6, 1) as volume_M,
   round(sum(closed_pnl), 0) as total_pnl
-FROM hl_fills
-WHERE sign = 1
+FROM hl_fills FINAL
 GROUP BY user
 ORDER BY volume_M DESC
 LIMIT 20
@@ -554,24 +548,23 @@ SELECT
   round(sum(closed_pnl), 0) as pnl,
   round(sum(fee), 0) as fees,
   round(sum(closed_pnl) - sum(fee), 0) as net_pnl
-FROM whale_fills
-WHERE sign = 1
+FROM whale_fills FINAL
 GROUP BY user
 ORDER BY net_pnl DESC
 ```
 
 ### Whale position changes over time
 ```sql
--- Note: side values in ClickHouse are 'Buy'/'Sell' (mapped from raw 'B'/'S' in the pipe)
+-- Note: side values in ClickHouse are 'Bid'/'Ask' (mapped from raw 'B'/'A' in the pipe)
 SELECT
   toStartOfHour(timestamp) as hour,
   user,
   coin,
-  sumIf(sz, side = 'Buy') as bought,
-  sumIf(sz, side = 'Sell') as sold,
-  round(sumIf(sz, side = 'Buy') - sumIf(sz, side = 'Sell'), 4) as net_flow
-FROM whale_fills
-WHERE coin = 'BTC' AND sign = 1
+  sumIf(sz, side = 'Bid') as bid_size,
+  sumIf(sz, side = 'Ask') as ask_size,
+  round(sumIf(sz, side = 'Bid') - sumIf(sz, side = 'Ask'), 4) as net_flow
+FROM whale_fills FINAL
+WHERE coin = 'BTC'
 GROUP BY hour, user, coin
 ORDER BY hour DESC
 LIMIT 50
@@ -587,8 +580,7 @@ SELECT
   round(sum(closed_pnl), 0) as pnl,
   round(sum(closed_pnl) - sum(fee), 0) as net_pnl,
   round(countIf(closed_pnl > 0) * 100.0 / countIf(closed_pnl != 0), 1) as win_rate
-FROM hl_fills
-WHERE sign = 1
+FROM hl_fills FINAL
 GROUP BY user
 HAVING countIf(closed_pnl > 0) + countIf(closed_pnl < 0) > 0
 ORDER BY volume_M DESC
@@ -597,13 +589,13 @@ LIMIT 20
 
 ### Long vs Short volume by direction labels
 ```sql
--- Use dir values for long/short breakdown (not side)
+-- Use dir values for participant-side activity (not side).
+-- Adding the long and short totals double-counts market volume.
 SELECT
   coin,
   round(sum(CASE WHEN dir IN ('Open Long', 'Close Short', 'Long > Short') THEN notional ELSE 0 END)/1e6, 2) as long_volume_M,
   round(sum(CASE WHEN dir IN ('Open Short', 'Close Long', 'Short > Long') THEN notional ELSE 0 END)/1e6, 2) as short_volume_M
-FROM hl_fills
-WHERE sign = 1
+FROM hl_fills FINAL
 GROUP BY coin
 ORDER BY long_volume_M + short_volume_M DESC
 ```
@@ -615,7 +607,7 @@ SELECT
   if(crossed, 'Taker', 'Maker') as type,
   count() as fills,
   round(sum(fee), 2) as total_fees
-FROM hl_fills
+FROM hl_fills FINAL
 GROUP BY coin, type
 ORDER BY coin, type
 ```

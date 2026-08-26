@@ -338,13 +338,13 @@ Request methods: `addTransactionRequest` (`{inputs, outputs}` relation flags), `
 - Values are **BTC floats** (Bitcoin Core convention), not satoshis — multiply by 1e8 for sats
 - `scriptPubKeyType` gives the standard script classification (`pubkeyhash`, `witness_v0_keyhash`, `witness_v1_taproot`, `nulldata`, …)
 - Coinbase inputs carry a `coinbase` hex field and no `txid`/`vout`/prevout data
-- Test helpers available at `@subsquid/pipes/testing/bitcoin`
+- Testing helper: `mockBitcoinRpc` from `@subsquid/pipes/testing/bitcoin`
 
 Full example: `docs/examples/bitcoin/01.utxo-decoder.example.ts` in the [pipes-sdk repo](https://github.com/subsquid-labs/pipes-sdk).
 
 ## Hyperliquid Fills (No CLI Template)
 
-The Pipes SDK supports Hyperliquid fills natively via `@subsquid/pipes/hyperliquid`, but there is **no CLI template yet**. Scaffold manually and install a reproducible current range such as `npm i '@subsquid/pipes@^1.0.0-beta.1'`. See [HYPERLIQUID_GUIDE.md](HYPERLIQUID_GUIDE.md) for the complete walkthrough, or the official [Hyperliquid quickstart](https://docs.sqd.dev/en/sdk/pipes-sdk/hyperliquid/quickstart).
+The Pipes SDK supports Hyperliquid fills natively via `@subsquid/pipes/hyperliquid`, but there is **no CLI template yet**. Scaffold manually and pin the reviewed release, for example `npm i '@subsquid/pipes@1.0.0-beta.4'`. See [HYPERLIQUID_GUIDE.md](HYPERLIQUID_GUIDE.md) for the complete walkthrough, or the official [Hyperliquid quickstart](https://docs.sqd.dev/en/sdk/pipes-sdk/hyperliquid/quickstart).
 
 Quick pattern:
 ```typescript
@@ -354,19 +354,22 @@ const query = hyperliquidFillsQuery()
   .addRange({ from: 920000000 })
   .addFields({
     block: { number: true, timestamp: true },
-    fill: { user: true, coin: true, px: true, sz: true, side: true, dir: true,
+    fill: { fillIndex: true, user: true, coin: true, px: true, sz: true, side: true, dir: true,
             closedPnl: true, fee: true, feeToken: true, crossed: true, startPosition: true },
   })
   .addFillRequest({ range: { from: 920000000 }, request: { coin: ['BTC', 'ETH', 'SOL'] } })
 
 await hyperliquidFillsPortalStream({
   id: 'hl-perps-fills',
-  portal: 'https://portal.sqd.dev/datasets/hyperliquid-fills',
+  portal: {
+    url: 'https://portal.sqd.dev/datasets/hyperliquid-fills',
+    finalized: true,
+  },
   outputs: query,
 })
 ```
 
-**Critical:** `.addFillRequest()` requires a `range`; omitting it crashes. Dataset starts at block **750,000,000**. Blocks increment at ~1/second, so `current_block - (days × 86400)` estimates a start.
+**Critical:** `.addFillRequest()` requires a `range`; omitting it crashes. Dataset starts at block **750,000,000**. For a durable target, keep `finalized: true`, persist `fillIndex`, and identify a row by `(block.number, fillIndex)`.
 
 ## Supported Targets
 
