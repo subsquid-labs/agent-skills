@@ -58,6 +58,17 @@ env PATH="$FAKE_BIN_DIR:$PATH" SQD_PERF_FAKE_LOGS_EXIT=0 SQD_PERF_MAX_ATTEMPTS=1
   bash "$SKILL_DIR/scripts/fetch-logs.sh" org/name@hash 2026-01-01T00:00:00Z "$TEST_TMP_DIR/success.log"
 [ -e "$TEST_TMP_DIR/success.log.done" ] || fail "fetch did not write a completion sentinel"
 
+printf 'test: fetch and parser accept ANSI-colored CLI output\n' >&2
+env PATH="$FAKE_BIN_DIR:$PATH" SQD_PERF_FAKE_LOGS_EXIT=0 SQD_PERF_FAKE_ANSI=1 SQD_PERF_MAX_ATTEMPTS=1 SQD_PERF_BACKOFF=0 SQD_PERF_EXPECT_TIMEOUT=1 \
+  bash "$SKILL_DIR/scripts/fetch-logs.sh" org/name@hash 2026-01-01T00:00:00Z "$TEST_TMP_DIR/ansi.log"
+[ -e "$TEST_TMP_DIR/ansi.log.done" ] || fail "fetch rejected ANSI-colored logs"
+node "$SKILL_DIR/scripts/parse.mjs" \
+  --input "$TEST_TMP_DIR/ansi.log" \
+  --output "$TEST_TMP_DIR/ansi.json" \
+  --label ansi
+node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1])); if (p.meta.parsedLines !== 6) process.exit(1)' "$TEST_TMP_DIR/ansi.json" \
+  || fail "parser did not preserve all ANSI-colored log lines"
+
 printf 'test: parser accepts current CLI levels and preserves restart origin\n' >&2
 node "$SKILL_DIR/scripts/parse.mjs" \
   --input "$TESTS_DIR/fixtures/current-levels.log" \
@@ -85,4 +96,4 @@ node "$SKILL_DIR/scripts/report.mjs" --run-dir "$REPORT_DIR"
 grep -q 'optimized.*2.50× faster.*baseline' "$REPORT_DIR/report.md" || fail "Markdown comparison verdict is missing"
 node "$TESTS_DIR/assert-report.mjs" "$REPORT_DIR/report.html"
 
-printf '{"status":"ok","tests":6}\n'
+printf '{"status":"ok","tests":7}\n'

@@ -47,6 +47,19 @@ MAX_ATTEMPTS="${SQD_PERF_MAX_ATTEMPTS:-3}"
 BACKOFF_SEC="${SQD_PERF_BACKOFF:-10}"
 EXPECT_TIMEOUT="${SQD_PERF_EXPECT_TIMEOUT:-600}"   # per-page wait, seconds
 
+has_recognizable_log_line() {
+  # `expect` allocates a PTY, so the CLI may colorize individual fields. Strip
+  # ANSI SGR sequences line-by-line before checking the current log shape.
+  awk '
+    BEGIN { esc = sprintf("%c", 27) }
+    {
+      gsub(esc "\\[[0-9;]*m", "")
+      if ($0 ~ /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[^[:space:]]+Z[[:space:]]+(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|CRITICAL|FATAL)[[:space:]]+/) found = 1
+    }
+    END { exit found ? 0 : 1 }
+  ' "$1"
+}
+
 attempt=1
 while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
   printf "fetch-logs [%s] attempt %d/%d — since=%s\n" "$REF" "$attempt" "$MAX_ATTEMPTS" "$SINCE" >&2
@@ -92,7 +105,7 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
   line_count="${line_count:-0}"
 
   if [ "$rc" -eq 0 ] && [ "$line_count" -gt 5 ] \
-     && grep -qE '[0-9]{4}-[0-9]{2}-[0-9]{2}T[^[:space:]]+Z[[:space:]]+(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|CRITICAL|FATAL)[[:space:]]+' "$PARTIAL" \
+     && has_recognizable_log_line "$PARTIAL" \
      && ! grep -qE '^(Error|error:|ERR_|Not authorized|Unauthenticated|please run.*auth)' "$PARTIAL"; then
     # success path — atomic rename + sentinel
     mv -f "$PARTIAL" "$OUT_PATH"
