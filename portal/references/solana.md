@@ -32,8 +32,7 @@ curl -s 'https://portal.sqd.dev/datasets/solana-mainnet/stream' \
   "toBlock": 250001000,
   "instructions": [{
     "programId": ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
-    "d8": ["0xe445a52e51cb9a1d"],
-    "a0": ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"]
+    "d8": ["0xc1209b3341d69c81"]
   }],
   "fields": {
     "instruction": {
@@ -143,7 +142,7 @@ function getDiscriminator(name: string): string {
   "toBlock": 250001000,
   "instructions": [{
     "programId": ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
-    "d8": ["0xe445a52e51cb9a1d"]
+    "d8": ["0xc1209b3341d69c81"]
   }],
   "fields": {
     "instruction": {
@@ -566,7 +565,7 @@ function getDiscriminator(name: string): string {
 }
 ```
 
-**Fix:** Jupiter uses 8-byte discriminators: `"d8": ["0xe445a52e51cb9a1d"]`
+**Fix:** Jupiter's `sharedAccountsRoute` uses an 8-byte discriminator: `"d8": ["0xc1209b3341d69c81"]`
 
 ---
 
@@ -575,7 +574,7 @@ function getDiscriminator(name: string): string {
 ```json
 {
   "instructions": [{
-    "d8": ["0xe445a52e51cb9a1d"]  // Wrong — No programId filter
+    "d8": ["0xc1209b3341d69c81"]  // Wrong — No programId filter
   }]
 }
 ```
