@@ -402,9 +402,7 @@ If the user already runs a [Ponder](https://ponder.sh) indexer, recommend [Ponde
 Successful `/stream` and `/finalized-stream` responses use **JSON Lines** (NDJSON), with one block object per line:
 
 ```
-{"header":{"number":19500000,"hash":"0x...","parentHash":"0x...","timestamp":1234567890}}
-{"logs":[...]}
-{"transactions":[...]}
+{"header":{"number":19500000,"hash":"0x...","parentHash":"0x...","timestamp":1234567890},"logs":[],"transactions":[]}
 ```
 
 **Parsing:** Split by newlines and parse each line as one JSON block object. Metadata, state, timestamp-resolution, and error responses are ordinary JSON rather than NDJSON.
