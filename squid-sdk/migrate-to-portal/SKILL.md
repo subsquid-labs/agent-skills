@@ -3,7 +3,7 @@ name: migrate-to-portal
 description: Migrate an existing Squid SDK indexer (EVM or Solana) off the v2 gateway and onto the Portal data source. Covers the package swap (`@subsquid/evm-processor` → `@subsquid/evm-stream` + `@subsquid/evm-objects` + `@subsquid/batch-processor` for EVM; `@subsquid/solana-stream@^0.x` → `^1.x` for Solana), the API/type shape changes, and field-selection changes. Use when the user mentions migrating, porting, upgrading, or converting a v2 squid to Portal; references `v2.archive.subsquid.io`, `setGateway`, `setDataSource`, `lookupArchive`, or `SolanaRpcClient`; or hits TS errors on `EvmBatchProcessor`, `evmLog`, or `block.header.slot` after a `@subsquid/*` bump.
 metadata:
   author: subsquid
-  version: "1.1.0"
+  version: "1.2.0"
   category: documentation
 ---
 
@@ -11,7 +11,7 @@ metadata:
 
 Walks the migration of an existing Squid SDK indexer onto the Portal data source. EVM and Solana have different package sets; the migration shape (data source + types + field selection) is parallel. Upstream doc (unified, both chains): <https://docs.sqd.dev/en/sdk/migration/gateway-to-portal>.
 
-> **The v2 gateways are actively being sunset.** On 2026-08-05, 18 datasets (including `astar-mainnet`, `berachain-mainnet`, `celo-mainnet`, `linea-mainnet`, `scroll-mainnet`, `taiko-mainnet`, `unichain-mainnet`, `zksync-mainnet`, `zora-mainnet`) became **Portal-only** — a v2 squid on those chains is already broken and must migrate. 67 more low-usage datasets retire from both v2 and Portal on **2026-08-20** ([announcement](https://docs.sqd.dev/announcements/dataset-retirements-august-2026)); check the target dataset in pre-flight step 2 before migrating. The [July 30, 2026 Squid SDK release](https://github.com/subsquid/squid-sdk/releases/tag/2026-07-30) also introduced the `@subsquid/squid-sdk` umbrella package with an automatic Portal/RPC failover data source — an option to consider for new work, though this guide's `@subsquid/evm-stream` target remains current.
+> **The v2 gateways are actively being sunset.** On 2026-08-05, 18 datasets (including `astar-mainnet`, `berachain-mainnet`, `celo-mainnet`, `linea-mainnet`, `scroll-mainnet`, `taiko-mainnet`, `unichain-mainnet`, `zksync-mainnet`, `zora-mainnet`) became **Portal-only**. A v2 squid on those chains is already broken and must migrate. On **2026-08-20**, 67 low-usage datasets retired from both v2 and Portal ([announcement](https://docs.sqd.dev/announcements/dataset-retirements-august-2026)); there is no Portal migration target for them, so move to RPC or a private Portal instead. The [July 30, 2026 Squid SDK release](https://github.com/subsquid/squid-sdk/releases/tag/2026-07-30) also introduced the `@subsquid/squid-sdk` umbrella package with an automatic Portal/RPC failover data source. Consider it for new work, though this guide's `@subsquid/evm-stream` target remains current.
 
 ## When to use this skill
 
@@ -35,11 +35,11 @@ Activate when the user says any of:
    - `@subsquid/evm-processor` → EVM section below
    - `@subsquid/solana-stream@^0.x` → Solana section below
 
-2. **Verify the Portal dataset slug.** Map the old archive URL `https://v2.archive.subsquid.io/network/<slug>` to the Portal URL:
+2. **Verify that the dataset is active, then verify its Portal slug.** First check the [August 2026 retirement list](https://docs.sqd.dev/announcements/dataset-retirements-august-2026). Any listed dataset stopped ingesting on August 20 and has no Portal migration target. Then map the old archive URL `https://v2.archive.subsquid.io/network/<slug>` to the Portal URL:
    ```bash
    curl -sI https://portal.sqd.dev/datasets/<slug>/metadata
    ```
-   `200 OK` = exists. `404` = wrong slug — search at <https://portal.sqd.dev/datasets>.
+   `200 OK` = catalog entry exists. `404` = wrong or removed slug; search at <https://portal.sqd.dev/datasets>. A `200` does not override an announced retirement; always perform the retirement check first.
 
 3. **Inventory direct RPC calls in the batch handler.** If the handler uses `new abi.Contract(ctx, header, address)` or `Multicall(...)` for contract reads, the migration needs the optional RPC-client step.
 
@@ -55,51 +55,7 @@ Activate when the user says any of:
 
 ## Add the v2 gateway API key — EVM only (alternative to migrating)
 
-As of the May 19, 2026 12:00 UTC cutover, authenticated calls to the v2 gateway are **mandatory** for self-hosted setups (see <https://docs.sqd.dev/changelog/gateway-api-keys>). **Migrating to Portal is the recommended path** — Portal needs no API key. This v2-with-`apiKey` configuration is the alternative if you must stay on the v2 gateway for now — and only where a v2 gateway still exists: 18 datasets became Portal-only on 2026-08-05 (see the note at the top), and gateways are slated for sunset later in 2026.
-
-Only use this section if the user wants to stay on EVM v2 gateways for now. When in doubt, ask them.
-
-**On Solana, always migrate to the Portal instead.** For now it's possible to use the v2 Solana gateway with a key, but it's heavily discouraged.
-
-To access v2 gateways with a key:
-
-1. **Get a key:** register at <https://portal.sqd.dev/app> and create a gateway API key.
-
-2. The `apiKey` field on the gateway settings is supported by:
-
-| Chain | Package | First version with `apiKey` |
-|---|---|---|
-| EVM | `@subsquid/evm-processor` | `1.30.0` (still v2; `setGateway`-shaped) |
-
-If your squid is on an older release, bump to at least the version above before adding `apiKey`. Older versions reject the field with `TS2353: 'apiKey' does not exist in type 'GatewaySettings'`.
-
-```bash
-npm i @subsquid/evm-processor@^1.30.0
-```
-
-3. Then convert the call:
-
-```diff
-- .setGateway('https://v2.archive.subsquid.io/network/<slug>')
-+ .setGateway({
-+   url: 'https://v2.archive.subsquid.io/network/<slug>',
-+   apiKey: process.env.SQD_API_KEY,
-+ })
-```
-
-```bash
-echo 'SQD_API_KEY=...' >> .env
-echo 'SQD_API_KEY=your_api_key_here' >> .env.example
-echo '.env' >> .gitignore
-```
-
-Both `GatewaySettings.apiKey` definitions document "Defaults to `SQD_API_KEY`" — the field is auto-read from the environment if omitted on the call. Passing it explicitly is clearer.
-
-> Going to `latest` instead skips over the v2-with-`apiKey` configuration: on EVM, `latest` is `@subsquid/evm-stream`/`@subsquid/evm-objects` (Portal stack) where `setGateway` is gone. Pin the v2 version above only if you need the intermediate v2-with-auth stage; otherwise the Portal migration below makes API keys moot.
-
-Reference docs:
-- Changelog: <https://docs.sqd.dev/changelog/gateway-api-keys>
-- API-key setup guide: <https://docs.sqd.dev/en/data/api-keys>
+Only use the v2-auth path when the user explicitly wants to remain on an EVM v2 gateway that still exists. For versions, environment setup, and the `setGateway({ url, apiKey })` form, read [references/v2-auth.md](references/v2-auth.md). On Solana, follow the Portal migration below instead.
 
 ---
 

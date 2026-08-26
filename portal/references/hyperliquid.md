@@ -302,7 +302,7 @@ Note the `/stream` suffix — omitting it returns a 404. The request body uses t
   "fields": { "fill": { "coin": true }, "block": { "number": true } }
 }
 ```
-The `fills` array contains filter objects directly: `[{ "coin": ["BTC"] }]`, NOT `[{ "request": { "coin": ["BTC"] } }]`. The `request` wrapper is a Pipes SDK concept (`addFill({ request: ... })`), not a Portal API concept.
+The `fills` array contains filter objects directly: `[{ "coin": ["BTC"] }]`, NOT `[{ "request": { "coin": ["BTC"] } }]`. The `request` wrapper is a Pipes SDK concept (`addFillRequest({ request: ... })`), not a Portal API concept.
 
 **Timestamps are in milliseconds** (unlike EVM chains which use seconds):
 ```json

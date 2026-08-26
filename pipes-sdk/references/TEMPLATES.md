@@ -13,7 +13,7 @@ Current catalog (verified against the published beta.2 schema): `networkType: "e
 
 > **The CLI's built-in network list can lag Portal** — `defaultNetwork` validates against a bundled slug list, which may still offer datasets Portal has dropped (e.g. `fantom-mainnet`) and miss recent additions. Verify the dataset with `curl -I https://portal.sqd.dev/datasets/{name}/metadata` before scaffolding.
 
-> **Generated projects pin `"@subsquid/pipes": "^1.0.0-beta.1"`** — a prerelease-aware caret range that takes the 1.0 betas today and stable 1.0.0 once it ships (a plain `^1.0.0` excludes prereleases and resolves to nothing). Projects from the old alpha CLI pinned the floating `"alpha"` dist-tag instead — those pull `1.0.0-alpha.21` (renamed APIs) on a fresh install and can break; see [TROUBLESHOOTING.md](TROUBLESHOOTING.md#error-pattern-11-renamed-sdk-exports-after-reinstall).
+> **Generated projects pin `"@subsquid/pipes": "^1.0.0-beta.1"`**. This installs beta.3 as of 2026-08-26 and will accept stable 1.0.0 once it ships (a plain `^1.0.0` excludes prereleases and resolves to nothing). Pin `1.0.0-beta.4` explicitly for its Pub/Sub signals and lag metrics. Projects from the old alpha CLI pinned the floating `"alpha"` dist-tag instead. Those pull `1.0.0-alpha.22` as of 2026-08-26 and can break on a fresh install; see [TROUBLESHOOTING.md](TROUBLESHOOTING.md#error-pattern-11-renamed-sdk-exports-after-reinstall).
 
 ## What the CLI generates
 
@@ -146,7 +146,7 @@ const query = solanaQuery()
     transaction: { signatures: true },
     instruction: { programId: true, accounts: true, data: true },
   })
-  .addInstruction({
+  .addInstructionRequest({
     range: { from: 280000000 },
     request: {
       programId: [whirlpool.programId],
@@ -159,9 +159,9 @@ const query = solanaQuery()
   })
 ```
 
-**Decoding in `.pipe()`:**
+**Decoding in the query output:**
 ```typescript
-.pipe((blocks) => {
+const output = query.build().pipe((blocks) => {
   const swaps = []
   for (const block of blocks) {
     for (const ins of block.instructions ?? []) {
@@ -218,7 +218,7 @@ const INSTRUCTIONS: Record<string, string> = {
 
 **Step 3: Filter by d1 in SolanaQueryBuilder:**
 ```typescript
-.addInstruction({
+.addInstructionRequest({
   range: { from: FROM_SLOT },
   request: {
     programId: [SPL_STAKE_POOL],
@@ -229,7 +229,7 @@ const INSTRUCTIONS: Record<string, string> = {
 })
 ```
 
-**Step 4: Decode manually in `.pipe()`:**
+**Step 4: Decode manually in a `query.build().pipe(...)` transform:**
 ```typescript
 const data = base58Decode(ins.data)
 const d1Hex = '0x' + data[0].toString(16).padStart(2, '0')
@@ -252,9 +252,9 @@ Many Solana DeFi protocols use layered architecture where user-facing programs c
 
 **Symptom:** Indexer returns zero data but Portal shows instructions exist → instructions are CPI (inner instructions).
 
-**Fix:** Add `innerInstructions: true` to `addInstruction()`:
+**Fix:** Add `innerInstructions: true` to `addInstructionRequest()`:
 ```typescript
-.addInstruction({
+.addInstructionRequest({
   range: { from: FROM_SLOT },
   request: {
     programId: [myProgram.programId],
@@ -270,21 +270,21 @@ Many Solana DeFi protocols use layered architecture where user-facing programs c
 
 ## Tron (No CLI Template)
 
-The Pipes SDK supports Tron natively via `@subsquid/pipes/tron`, but the CLI cannot scaffold Tron projects — set up manually (package.json, tsconfig, src/index.ts, sink config). Install the SDK with a bare `npm i @subsquid/pipes` (npm `latest` is now the 1.0 beta line, currently `1.0.0-beta.1`). Official walkthrough: [Tron quickstart](https://docs.sqd.dev/en/sdk/pipes-sdk/tron/quickstart).
+The Pipes SDK supports Tron natively via `@subsquid/pipes/tron`, but the CLI cannot scaffold Tron projects. Set it up manually (package.json, tsconfig, src/index.ts, sink config). Install a reproducible current range such as `npm i '@subsquid/pipes@^1.0.0-beta.1'` (beta.3 as of 2026-08-26). Official walkthrough: [Tron quickstart](https://docs.sqd.dev/en/sdk/pipes-sdk/tron/quickstart).
 
 ```typescript
-import { TronQueryBuilder, tronPortalStream } from '@subsquid/pipes/tron'
+import { tronPortalStream, tronQuery } from '@subsquid/pipes/tron'
 
 const stream = tronPortalStream({
   id: 'tron-usdt-transfers',
   portal: 'https://portal.sqd.dev/datasets/tron-mainnet',
-  outputs: new TronQueryBuilder()
+  outputs: tronQuery()
     .addFields({
       block: { number: true, hash: true, timestamp: true },
       transaction: { transactionIndex: true, hash: true, energyUsageTotal: true, result: true },
       log: { transactionIndex: true, logIndex: true, address: true, topics: true, data: true },
     })
-    .addTriggerSmartContractTransaction({
+    .addTriggerSmartContractTransactionRequest({
       request: {
         contract: ['41a614f803b6fd780986a42c78ec9c7f77e6ded13c'],  // USDT — bare hex, no 0x
         sighash: ['a9059cbb'],                                     // transfer(address,uint256)
@@ -295,7 +295,7 @@ const stream = tronPortalStream({
 })
 ```
 
-Request methods: `addTransaction` (by Tron contract `type`), `addTransferTransaction` (native TRX), `addTransferAssetTransaction` (TRC-10), `addTriggerSmartContractTransaction` (contract calls), `addLog`, `addInternalTransaction`, `includeAllBlocks`.
+Request methods: `addTransactionRequest` (by Tron contract `type`), `addTransferTransactionRequest` (native TRX), `addTransferAssetTransactionRequest` (TRC-10), `addTriggerSmartContractTransactionRequest` (contract calls), `addLogRequest`, `addInternalTransactionRequest`, `includeAllBlocks`.
 
 **Critical Tron facts:**
 - All hex is **bare** (no `0x` prefix); transaction-level addresses are 21-byte `41…` hex (not base58 `T…`), while **log addresses use the 20-byte EVM-style form without `41`**
@@ -308,15 +308,15 @@ Full example: `docs/examples/tron/01.trc20-transfers.example.ts` in the [pipes-s
 
 ## Bitcoin (No CLI Template)
 
-The Pipes SDK supports Bitcoin natively via `@subsquid/pipes/bitcoin`, but the CLI cannot scaffold Bitcoin projects — set up manually. Install the SDK with a bare `npm i @subsquid/pipes` (npm `latest` is now the 1.0 beta line). Official walkthrough: [Bitcoin quickstart](https://docs.sqd.dev/en/sdk/pipes-sdk/bitcoin/quickstart).
+The Pipes SDK supports Bitcoin natively via `@subsquid/pipes/bitcoin`, but the CLI cannot scaffold Bitcoin projects. Set it up manually and install a reproducible current range such as `npm i '@subsquid/pipes@^1.0.0-beta.1'`. Official walkthrough: [Bitcoin quickstart](https://docs.sqd.dev/en/sdk/pipes-sdk/bitcoin/quickstart).
 
 ```typescript
-import { BitcoinQueryBuilder, bitcoinPortalStream } from '@subsquid/pipes/bitcoin'
+import { bitcoinPortalStream, bitcoinQuery } from '@subsquid/pipes/bitcoin'
 
 const stream = bitcoinPortalStream({
   id: 'bitcoin-utxo',
   portal: 'https://portal.sqd.dev/datasets/bitcoin-mainnet',
-  outputs: new BitcoinQueryBuilder()
+  outputs: bitcoinQuery()
     .addFields({
       block: { number: true, hash: true, timestamp: true },
       transaction: { transactionIndex: true, txid: true, size: true },
@@ -325,14 +325,14 @@ const stream = bitcoinPortalStream({
       output: { transactionIndex: true, outputIndex: true, value: true,
                 scriptPubKeyType: true, scriptPubKeyAddress: true, scriptPubKeyAsm: true },
     })
-    .addTransaction({
+    .addTransactionRequest({
       request: { inputs: true, outputs: true },
       range: { from: 900_000 },
     }),
 })
 ```
 
-Request methods: `addTransaction` (`{inputs, outputs}` relation flags), `addInput` (by `type`/`prevoutScriptPubKeyAddress`/`prevoutScriptPubKeyType`), `addOutput` (by `scriptPubKeyAddress`/`scriptPubKeyType`), `includeAllBlocks`.
+Request methods: `addTransactionRequest` (`{inputs, outputs}` relation flags), `addInputRequest` (by `type`/`prevoutScriptPubKeyAddress`/`prevoutScriptPubKeyType`), `addOutputRequest` (by `scriptPubKeyAddress`/`scriptPubKeyType`), `includeAllBlocks`.
 
 **Critical Bitcoin facts:**
 - Values are **BTC floats** (Bitcoin Core convention), not satoshis — multiply by 1e8 for sats
@@ -344,7 +344,7 @@ Full example: `docs/examples/bitcoin/01.utxo-decoder.example.ts` in the [pipes-s
 
 ## Hyperliquid Fills (No CLI Template)
 
-The Pipes SDK supports Hyperliquid fills natively via `@subsquid/pipes/hyperliquid`, but there is **no CLI template yet**. Scaffold manually and install the SDK with a bare `npm i @subsquid/pipes` (npm `latest` is now the 1.0 beta line). See [HYPERLIQUID_GUIDE.md](HYPERLIQUID_GUIDE.md) for the complete walkthrough, or the official [Hyperliquid quickstart](https://docs.sqd.dev/en/sdk/pipes-sdk/hyperliquid/quickstart).
+The Pipes SDK supports Hyperliquid fills natively via `@subsquid/pipes/hyperliquid`, but there is **no CLI template yet**. Scaffold manually and install a reproducible current range such as `npm i '@subsquid/pipes@^1.0.0-beta.1'`. See [HYPERLIQUID_GUIDE.md](HYPERLIQUID_GUIDE.md) for the complete walkthrough, or the official [Hyperliquid quickstart](https://docs.sqd.dev/en/sdk/pipes-sdk/hyperliquid/quickstart).
 
 Quick pattern:
 ```typescript
@@ -357,7 +357,7 @@ const query = hyperliquidFillsQuery()
     fill: { user: true, coin: true, px: true, sz: true, side: true, dir: true,
             closedPnl: true, fee: true, feeToken: true, crossed: true, startPosition: true },
   })
-  .addFill({ range: { from: 920000000 }, request: { coin: ['BTC', 'ETH', 'SOL'] } })
+  .addFillRequest({ range: { from: 920000000 }, request: { coin: ['BTC', 'ETH', 'SOL'] } })
 
 await hyperliquidFillsPortalStream({
   id: 'hl-perps-fills',
@@ -366,7 +366,7 @@ await hyperliquidFillsPortalStream({
 })
 ```
 
-**Critical:** `.addFill()` requires a `range` — omitting it crashes. Dataset starts at block **750,000,000**. Blocks increment at ~1/second, so `current_block - (days × 86400)` estimates a start.
+**Critical:** `.addFillRequest()` requires a `range`; omitting it crashes. Dataset starts at block **750,000,000**. Blocks increment at ~1/second, so `current_block - (days × 86400)` estimates a start.
 
 ## Supported Targets
 
@@ -379,3 +379,4 @@ CLI-scaffolded targets:
 SDK-only targets (wire manually with `.pipeTo(...)` — see [SDK_FEATURES.md](SDK_FEATURES.md#target-configuration)):
 - **BigQuery** — `@subsquid/pipes/targets/bigquery`, auto-created partitioned tables, fork-safe DELETEs
 - **Parquet** — `@subsquid/pipes/targets/parquet`, finalized-only rotating files for DuckDB/Spark/Athena
+- **Google Pub/Sub:** `@subsquid/pipes/targets/pubsub`, BigQuery CDC rows or application-defined signal routes with explicit fork handling

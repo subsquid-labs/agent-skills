@@ -4,7 +4,7 @@ Build Pipes SDK indexers for Hyperliquid perpetual futures trade fills.
 
 ## Overview
 
-The Pipes SDK supports Hyperliquid fills via `@subsquid/pipes/hyperliquid`. This is **not documented in the official docs yet** — the support was discovered from the npm package types.
+The Pipes SDK supports Hyperliquid fills via `@subsquid/pipes/hyperliquid`; see the official [Hyperliquid quickstart](https://docs.sqd.dev/en/sdk/pipes-sdk/hyperliquid/quickstart).
 
 There is **no CLI template** for Hyperliquid. You must scaffold the project manually.
 
@@ -92,7 +92,7 @@ const env = z
   })
   .parse(process.env)
 
-const query = hyperliquidFillsQuery()
+const output = hyperliquidFillsQuery()
   .addRange({ from: 920000000 })
   .addFields({
     block: { number: true, timestamp: true },
@@ -110,36 +110,37 @@ const query = hyperliquidFillsQuery()
       startPosition: true,
     },
   })
-  .addFill({ range: { from: 920000000 }, request: { coin: ['BTC', 'ETH', 'SOL'] } })
+  .addFillRequest({ range: { from: 920000000 }, request: { coin: ['BTC', 'ETH', 'SOL'] } })
+  .build()
+  .pipe((blocks) => {
+    const fills = blocks.flatMap((block) =>
+      block.fills.map((fill) => ({
+        block_number: block.header.number,
+        timestamp: new Date(block.header.timestamp).toISOString(),
+        user: fill.user,
+        coin: fill.coin,
+        px: fill.px,
+        sz: fill.sz,
+        side: fill.side === 'B' ? 'Buy' : 'Sell',
+        dir: fill.dir,
+        closed_pnl: fill.closedPnl,
+        fee: fill.fee,
+        fee_token: fill.feeToken,
+        crossed: fill.crossed,
+        start_position: fill.startPosition,
+        notional: fill.px * fill.sz,
+        sign: 1,
+      })),
+    )
+    return { fills }
+  })
 
 export async function main() {
   await hyperliquidFillsPortalStream({
     id: 'hl-perps-fills',
     portal: 'https://portal.sqd.dev/datasets/hyperliquid-fills',
-    outputs: query,
+    outputs: output,
   })
-    .pipe((blocks) => {
-      const fills = blocks.flatMap((block) =>
-        block.fills.map((fill) => ({
-          block_number: block.header.number,
-          timestamp: new Date(block.header.timestamp).toISOString(),
-          user: fill.user,
-          coin: fill.coin,
-          px: fill.px,
-          sz: fill.sz,
-          side: fill.side === 'B' ? 'Buy' : 'Sell',
-          dir: fill.dir,
-          closed_pnl: fill.closedPnl,
-          fee: fill.fee,
-          fee_token: fill.feeToken,
-          crossed: fill.crossed,
-          start_position: fill.startPosition,
-          notional: fill.px * fill.sz,
-          sign: 1,
-        })),
-      )
-      return { fills }
-    })
     .pipeTo(
       clickhouseTarget({
         client: createClient({
@@ -225,9 +226,9 @@ Builder for constructing Hyperliquid fills queries.
 |--------|-------------|
 | `.addRange({ from })` | Set the starting block (dataset starts at 750,000,000) |
 | `.addFields({ block, fill })` | Select which fields to include |
-| `.addFill({ range, request })` | Add fill filter (**range is required**) |
+| `.addFillRequest({ range, request })` | Add fill filter (**range is required**) |
 
-### addFill request options
+### addFillRequest options
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -276,7 +277,7 @@ const query = hyperliquidFillsQuery()
       crossed: true, startPosition: true,
     },
   })
-  .addFill({ range: { from: 920000000 }, request: { user: WHALES } })
+  .addFillRequest({ range: { from: 920000000 }, request: { user: WHALES } })
 ```
 
 **Tested result:** 894K fills for 5 whales in ~60 seconds. Top whale had $1.19B volume and -$1.47M PnL.
@@ -327,7 +328,7 @@ const query = hyperliquidFillsQuery()
       side: true, dir: true, closedPnl: true, fee: true, crossed: true,
     },
   })
-  .addFill({ range: { from: 924000000 }, request: { coin: COINS } })
+  .addFillRequest({ range: { from: 924000000 }, request: { coin: COINS } })
 ```
 
 **Tested result:** 2.35M fills for 9 coins in ~60 seconds. BTC dominated with $2.64B, HYPE had $368M.
@@ -444,14 +445,14 @@ For EVM indexers the divisor is not a fixed rule either: it depends on the Click
 
 ## Common Gotchas
 
-### 1. addFill requires range
+### 1. addFillRequest requires range
 
 ```typescript
 // WRONG — crashes with "Cannot read properties of undefined (reading 'from')"
-.addFill({ request: { coin: ['BTC'] } })
+.addFillRequest({ request: { coin: ['BTC'] } })
 
 // CORRECT
-.addFill({ range: { from: 920000000 }, request: { coin: ['BTC'] } })
+.addFillRequest({ range: { from: 920000000 }, request: { coin: ['BTC'] } })
 ```
 
 ### 2. Dataset starts at block 750,000,000
@@ -464,9 +465,9 @@ For EVM indexers the divisor is not a fixed rule either: it depends on the Click
 .addRange({ from: 750000000 })
 ```
 
-### 3. No event decoder — use .pipe() directly
+### 3. No event decoder: build and transform the query output
 
-Hyperliquid fills don't use `evmEventDecoder`. `.pipe()` receives `Block[]` directly where each block has `header` and `fills`. Use `.pipe()` to transform the data yourself.
+Hyperliquid fills don't use `evmEventDecoder`. Call `.build().pipe(...)` on the query output; the transform receives `Block[]` where each block has `header` and `fills`. Pass that chain as the stream's `outputs`. Source-level `.pipe()` no longer exists in the beta API.
 
 ### 4. Portal URL includes the dataset name
 

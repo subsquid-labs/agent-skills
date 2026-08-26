@@ -143,20 +143,23 @@ contracts: [
 **Implementation**:
 ```typescript
 // Before: Client-side filtering (fetch all, filter locally)
-events: {
-  transfer: commonAbis.erc20.events.Transfer,
-}
-.pipe((transfers) =>
-  transfers.filter(t => t.event.from === ADDRESS)
-)
+evmEventDecoder({
+  range: { from: 21_000_000 },
+  events: { transfer: commonAbis.erc20.events.Transfer },
+}).pipe((data) => ({
+  transfer: data.transfer.filter(t => t.event.from === ADDRESS),
+}))
 
 // After: Server-side filtering (only fetch relevant)
-events: {
-  transfer: {
-    abi: commonAbis.erc20.events.Transfer,
-    filter: { from: [ADDRESS] },  // Indexed parameter only
+evmEventDecoder({
+  range: { from: 21_000_000 },
+  events: {
+    transfer: {
+      event: commonAbis.erc20.events.Transfer,
+      params: { from: ADDRESS },  // Indexed parameter only
+    },
   },
-}
+})
 ```
 
 **Impact**: Reduces bandwidth and processing time

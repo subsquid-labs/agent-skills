@@ -25,7 +25,7 @@ Before building indexers, ensure you have:
 
 ### 1. Node.js
 
-**Required Version**: >= 22.15.0 — `@subsquid/pipes` (the 1.0 line, currently `1.0.0-beta.1`) declares `engines.node >= 22.15.0`, so v20 no longer qualifies.
+**Required Version**: >= 22.15.0. `@subsquid/pipes` 1.0 beta declares `engines.node >= 22.15.0`, so v20 no longer qualifies.
 
 **WARNING: Avoid Node.js v25.x** — It has known zstd decompression bugs that cause random crashes when streaming data from the Portal API into ClickHouse.
 
@@ -280,7 +280,7 @@ pnpx @subsquid/pipes-cli@1.0.0-beta.2 --version
 
 **Note**: No local SDK installation needed - CLI is used via pnpx
 
-**Manual (non-CLI) setups**: the SDK is in **1.0.0 beta** and npm `latest` now points to `1.0.0-beta.1`, so a bare `npm install @subsquid/pipes` installs the current 1.0 API — the old "install `@alpha` or you get the pre-1.0 `0.1.0-beta.17`" trap is gone. Do **not** pin the floating `"alpha"` dist-tag anymore: it now resolves to `1.0.0-alpha.21`, which already uses the renamed beta-line exports, and a floating tag makes builds non-reproducible. Prefer a caret range like `"^1.0.0-beta.1"` (this is what the beta CLI generates; a plain `"^1.0.0"` excludes prereleases and resolves to nothing until stable 1.0.0 ships). The CLI itself is the remaining dist-tag trap: `@subsquid/pipes-cli@latest` is the old `1.0.0-alpha.1` — always pin `@subsquid/pipes-cli@1.0.0-beta.2` (or `@beta`).
+**Manual (non-CLI) setups**: the SDK is in **1.0.0 beta**. On 2026-08-26 npm `latest` and the CLI-generated `"^1.0.0-beta.1"` range installed `1.0.0-beta.3`, while the `beta` tag pointed to `1.0.0-beta.4`. Pin beta.4 explicitly for its Pub/Sub signals and lag metrics; otherwise prefer an exact pin or the generated caret range, and recheck with `npm view @subsquid/pipes dist-tags --json`. Do **not** pin the floating `"alpha"` dist-tag: it resolved to `1.0.0-alpha.22` on that date, and floating tags make builds non-reproducible. A plain `"^1.0.0"` excludes prereleases and resolves to nothing until stable 1.0.0 ships. The CLI itself is the remaining dist-tag trap: `@subsquid/pipes-cli@latest` is the old `1.0.0-alpha.1`; always pin `@subsquid/pipes-cli@1.0.0-beta.2` (or `@beta`).
 
 ## Platform-Specific Notes
 

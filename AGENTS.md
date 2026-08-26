@@ -14,7 +14,7 @@ Skills live at the repo root. The skill directory name matches the skill's front
 pipes-sdk/                 # Build, deploy, troubleshoot Pipes SDK indexers
   SKILL.md
   references/
-portal/                    # Query SQD Portal across 200+ chains
+portal/                    # Query SQD Portal across 140+ networks
   SKILL.md
   references/
 squid-sdk/
@@ -131,7 +131,7 @@ All Pipes-related skills use `pnpx @subsquid/pipes-cli@1.0.0-beta.2` for project
 Use the [skills-ref](https://github.com/agentskills/agentskills/tree/main/skills-ref) library to validate a skill:
 
 ```bash
-skills-ref validate ./{skill-name}
+uvx --from skills-ref agentskills validate ./{skill-name}
 ```
 
 This checks that `SKILL.md` frontmatter is valid and follows naming conventions.

@@ -276,25 +276,25 @@ nvm install 22 && nvm use 22
 
 Treat count comparisons as approximate sanity checks (20–30% tolerance) and spot-checks as authoritative.
 
-## Error Pattern 10b: Hyperliquid addFill Missing Range
+## Error Pattern 10b: Hyperliquid addFillRequest Missing Range
 
 **Symptoms:**
 ```
 TypeError: Cannot read properties of undefined (reading 'from')
     at parsePortalRange
     at HyperliquidFillsQueryBuilder.addRequest
-    at HyperliquidFillsQueryBuilder.addFill
+    at HyperliquidFillsQueryBuilder.addFillRequest
 ```
 
-**Diagnosis:** `addFill()` requires a `range` parameter. Unlike EVM decoders where range is set once, each Hyperliquid fill filter needs its own range.
+**Diagnosis:** `addFillRequest()` requires a `range` parameter. Unlike EVM decoders where range is set once, each Hyperliquid fill filter needs its own range.
 
 **Fix:**
 ```typescript
 // WRONG
-.addFill({ request: { coin: ['BTC'] } })
+.addFillRequest({ request: { coin: ['BTC'] } })
 
 // CORRECT
-.addFill({ range: { from: 920000000 }, request: { coin: ['BTC'] } })
+.addFillRequest({ range: { from: 920000000 }, request: { coin: ['BTC'] } })
 ```
 
 Dataset starts at block **750,000,000**. In SDK 1.0+, use `hyperliquidFillsQuery()` instead of `new HyperliquidFillsQueryBuilder()`.
@@ -307,7 +307,7 @@ TypeError: evmDecoder is not a function
 SyntaxError: The requested module '@subsquid/pipes/evm' does not provide an export named 'evmPortalSource'
 ```
 
-**Diagnosis:** the project pins the floating `"alpha"` dist-tag (the old alpha CLI's default), which now resolves to `1.0.0-alpha.21` — a version that already carries the beta-line renames: `evmDecoder` → `evmEventDecoder`, the `evmPortalSource`/`solanaPortalSource`/`hyperliquidFillsPortalSource` aliases removed (only `*PortalStream` remain), `evmPortalMockStream` → `mockEvmPortalStream`, `batchForInsert`/`chunk` → `chunkForInsert`. Confirm with:
+**Diagnosis:** the project pins the floating `"alpha"` dist-tag (the old alpha CLI's default), which resolves to `1.0.0-alpha.22` as of 2026-08-26. That version already carries the beta-line renames: `evmDecoder` → `evmEventDecoder`, the `evmPortalSource`/`solanaPortalSource`/`hyperliquidFillsPortalSource` aliases removed (only `*PortalStream` remain), `evmPortalMockStream` → `mockEvmPortalStream`, `batchForInsert`/`chunk` → `chunkForInsert`, and query methods such as `addLog` → `addLogRequest`. Confirm with:
 ```bash
 npm ls @subsquid/pipes        # installed version
 grep '"@subsquid/pipes"' package.json   # "alpha" = floating tag
