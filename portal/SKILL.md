@@ -1,19 +1,19 @@
 ---
 name: portal
-description: "Query blockchain data across 200+ datasets with SQD Portal — EVM, Solana, Substrate, Bitcoin, Tron, Hyperliquid — and choose the right execution path: Portal MCP for bounded answers, Portal Stream API/curl for raw exports, or Pipes/Squid for durable pipelines."
+description: "Query blockchain data across 140+ networks with SQD Portal, including EVM, Solana, Substrate, Bitcoin, Tron, and Hyperliquid, and choose the right execution path: Portal MCP for bounded answers, Portal Stream API/curl for raw exports, or Pipes/Squid for durable pipelines."
 allowed-tools:
   - Bash
   - WebFetch
   - WebSearch
 metadata:
   author: subsquid
-  version: "1.3.0"
+  version: "1.4.0"
   category: portal-core
 ---
 
 # Portal
 
-Query and analyze blockchain data across 200+ datasets using SQD Portal. Use this skill to decide whether the job belongs in SQD Portal MCP tools, a raw Portal Stream API/curl request, or a durable Pipes/Squid indexer.
+Query and analyze blockchain data across 140+ networks using SQD Portal. Use this skill to decide whether the job belongs in SQD Portal MCP tools, a raw Portal Stream API/curl request, or a durable Pipes/Squid indexer.
 
 This skill should not be treated as a static copy of the MCP tool catalog. When the SQD Portal MCP server is available, read `sqd://tools` for the current grouped tool guide and `sqd://tools/{tool_name}` for exact per-tool guidance.
 
@@ -82,7 +82,7 @@ Default order:
 | Plasma | `plasma-mainnet` | EVM |
 | Unichain | `unichain-mainnet` | EVM |
 
-> **Full mapping:** See `references/dataset-mapping.md` for the full 200-dataset catalog including L2s, alt-L1s, and testnets, the real-time dataset list, and the datasets retiring on 2026-08-20.
+> **Full mapping:** See `references/dataset-mapping.md` for the current public catalog, the real-time dataset list, and the datasets retired on 2026-08-20. The live catalog can contain retired slugs temporarily, so existence alone is not proof that ingestion is active.
 
 ### Common Mistakes
 
@@ -363,6 +363,8 @@ Use raw Stream API when:
 - You need exact Portal request bodies for debugging or handoff.
 - The user needs to run the same request outside the MCP client.
 
+The public Portal is shared capacity. Do not promise that every Portal deployment is keyless: authenticated and dedicated Portal endpoints accept an API key in the `x-api-key` header while using the same request paths and payloads.
+
 Endpoint shape:
 
 ```bash
@@ -395,9 +397,9 @@ If the user already runs a [Ponder](https://ponder.sh) indexer, recommend [Ponde
 
 ---
 
-## Response Format
+## Stream Response Format
 
-All Portal responses use **JSON Lines** (NDJSON) — one JSON object per line:
+Successful `/stream` and `/finalized-stream` responses use **JSON Lines** (NDJSON), with one block object per line:
 
 ```
 {"header":{"number":19500000,"hash":"0x...","parentHash":"0x...","timestamp":1234567890}}
@@ -405,7 +407,7 @@ All Portal responses use **JSON Lines** (NDJSON) — one JSON object per line:
 {"transactions":[...]}
 ```
 
-**Parsing:** Split by newlines, parse each line as JSON. First line is always the block header.
+**Parsing:** Split by newlines and parse each line as one JSON block object. Metadata, state, timestamp-resolution, and error responses are ordinary JSON rather than NDJSON.
 
 A **204 No Content** is not an error — it means the requested range has no blocks yet (empty body, nothing to parse).
 
@@ -431,6 +433,12 @@ Every Portal error — any endpoint, any data source — uses one envelope:
 **Resuming a stream? Pass `parentBlockHash`** (hash of the parent of `fromBlock`). On a reorg the Portal answers `409` `base_block_mismatch` with a top-level `previousBlocks` list of canonical `{number, hash}` pairs — walk it back to a block you trust and resume from there. Omitting `parentBlockHash` means silently ingesting a forked chain. `/finalized-stream` never 409s.
 
 > **Full contract:** `references/error-handling.md` — complete codes table, fork-recovery walk, `Retry-After` semantics, CORS-exposed headers.
+
+---
+
+## API Versioning and Change Detection
+
+Portal has no version in its URL or headers. Read `references/versioning.md` before generating a client, writing a compatibility check, or deciding whether a changing dataset catalog is an API break.
 
 ---
 
@@ -485,11 +493,7 @@ Always add address/topic/programId filters and reasonable block ranges.
 - **[SQD Claude Connector](https://docs.sqd.dev/en/ai/claude-connector)** — One-click Portal MCP for Claude via the [Claude Directory](https://claude.ai/directory/connectors/sqd)
 - **[llms.txt](https://docs.sqd.dev/llms.txt)** — Quick reference for Portal API
 - **[llms-full.txt](https://docs.sqd.dev/llms-full.txt)** — Complete Portal documentation
-- **[EVM OpenAPI Schema](https://docs.sqd.dev/en/ai/evm-openapi)** — EVM API specification
-- **[Solana OpenAPI Schema](https://docs.sqd.dev/en/ai/solana-openapi)** — Solana API specification
-- **[Substrate OpenAPI Schema](https://docs.sqd.dev/en/ai/substrate-openapi)** — Substrate API specification
-- **[Bitcoin OpenAPI Schema](https://docs.sqd.dev/en/ai/bitcoin-openapi)** — Bitcoin API specification
-- **[Tron OpenAPI Schema](https://docs.sqd.dev/en/ai/tron-openapi)** — Tron API specification
-- **[Hyperliquid Fills OpenAPI](https://docs.sqd.dev/en/ai/hyperliquid-openapi)** — Hyperliquid API specification
+- **[Portal OpenAPI](https://docs.sqd.dev/openapi.json):** Machine-readable API contract with stable operation IDs
+- **[Versioning and change policy](https://docs.sqd.dev/en/portal/introduction/versioning):** Stable vs changing parts of the API
 - **Event Signature Calculator:** https://www.4byte.directory/
 - **Function Selector Database:** https://www.4byte.directory/

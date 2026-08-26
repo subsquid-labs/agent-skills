@@ -1,6 +1,6 @@
 # SDK 1.0 Features & Testing
 
-Reference for SDK 1.0+ APIs: time-based ranges, `defineAbi`, query builder shorthands, typed errors, decode-error hooks, the testing library, Tron/Bitcoin streams, BigQuery/Parquet targets, and cursor keying (current line: `@subsquid/pipes@1.0.0-beta.1`, which is also npm `latest`).
+Reference for SDK 1.0+ APIs: time-based ranges, `defineAbi`, query builders, typed errors, decode-error hooks, the testing library, Tron/Bitcoin streams, BigQuery/Parquet/Pub/Sub targets, finality, and cursor keying. Examples target `@subsquid/pipes@1.0.0-beta.4`; on 2026-08-26 npm `latest` was beta.3 and the `beta` tag was beta.4.
 
 ## Renamed in the Beta Line
 
@@ -16,8 +16,15 @@ The beta line (and alpha.17+) removed the old aliases and renamed several export
 | `batchForInsert` / `chunk` | `chunkForInsert` | `@subsquid/pipes/targets/drizzle/node-postgres` |
 | `factorySqliteDatabase` / `contractFactoryStore` | `contractFactorySqliteStore` | `@subsquid/pipes/evm` |
 | `SdkError` (enum) | `SdkErrorName` | `@subsquid/pipes` |
+| `factory` | `contractFactory` | `@subsquid/pipes/evm` |
+| `createClickhouseTarget` | `clickhouseTarget` | `@subsquid/pipes/targets/clickhouse` |
+| `createDefaultLogger` | `defaultLogger` | `@subsquid/pipes` |
+| `addLog`, `addTransaction`, `addInstruction`, `addFill`, etc. | `addLogRequest`, `addTransactionRequest`, `addInstructionRequest`, `addFillRequest`, etc. | Every query builder |
+| `createFinalizationBuffer` / `finalizationBuffer` | Removed; finalized-only targets declare `requiresFinalizedStream: true` | Target/source contract |
 
-Unchanged: `mockBlock`, `encodeEvent`, `resetMockBlockCounter`, `solanaInstructionDecoder`, `contractFactory`, `defineAbi`, all `*Query()` shorthands, all target factories.
+Prefer the `evmQuery()`, `solanaQuery()`, `hyperliquidFillsQuery()`, `tronQuery()`, and `bitcoinQuery()` factories over direct query-builder constructors. A query builder may be passed directly as `outputs`; call `.build()` before chaining `.pipe()` transforms. Source-level `.pipe()` / `.pipeComposite()` was removed: put one chainable output or a named output record inside the source's required `outputs` option.
+
+Other breaking renames to check when upgrading: `RunConfig` → `PipeContext`, `createDevRunner` → `devRunner`, `ResultOf<T>` → `OutputOf<T>`, `BatchCtx` → `BatchContext`, and `PortalClientOptions` duration keys now end in `Ms` (`maxIdleTimeMs`, `maxWaitTimeMs`, `headPollIntervalMs`). Metrics use `sqd_processed_block` / `sqd_end_block`, the preview endpoint is `/preview/transformation`, profiler options use `name` instead of `id`, and Solana decoded instructions expose `event.block.number` instead of top-level `event.blockNumber`.
 
 ## Time-Based Ranges
 
@@ -81,19 +88,19 @@ Factory functions replace `new *QueryBuilder()`:
 `@subsquid/pipes/tron` streams `tron-mainnet` with a native Tron data model (alpha.15+).
 
 ```typescript
-import { TronQueryBuilder, tronPortalStream } from '@subsquid/pipes/tron'
+import { tronPortalStream, tronQuery } from '@subsquid/pipes/tron'
 
 const stream = tronPortalStream({
   id: 'tron-usdt-transfers',
   portal: 'https://portal.sqd.dev/datasets/tron-mainnet',
-  outputs: new TronQueryBuilder()
+  outputs: tronQuery()
     .addFields({
       block: { number: true, hash: true, timestamp: true },
       transaction: { transactionIndex: true, hash: true, type: true, energyUsageTotal: true, result: true },
       log: { transactionIndex: true, logIndex: true, address: true, topics: true, data: true },
     })
     // USDT transfer(...) calls + the logs they emit
-    .addTriggerSmartContractTransaction({
+    .addTriggerSmartContractTransactionRequest({
       request: {
         contract: ['41a614f803b6fd780986a42c78ec9c7f77e6ded13c'], // USDT, bare hex
         sighash: ['a9059cbb'],                                    // transfer(address,uint256)
@@ -110,7 +117,7 @@ for await (const { data } of stream) {
 }
 ```
 
-Request methods on `TronQueryBuilder`: `addTransaction` (by contract `type`), `addTransferTransaction` (native TRX, `owner`/`to`), `addTransferAssetTransaction` (TRC-10, `owner`/`to`/`asset`), `addTriggerSmartContractTransaction` (`owner`/`contract`/`sighash`), `addLog` (`address`/`topic0..3`), `addInternalTransaction` (`caller`/`transferTo`), `includeAllBlocks`.
+Request methods on the Tron query builder: `addTransactionRequest` (by contract `type`), `addTransferTransactionRequest` (native TRX, `owner`/`to`), `addTransferAssetTransactionRequest` (TRC-10, `owner`/`to`/`asset`), `addTriggerSmartContractTransactionRequest` (`owner`/`contract`/`sighash`), `addLogRequest` (`address`/`topic0..3`), `addInternalTransactionRequest` (`caller`/`transferTo`), `includeAllBlocks`.
 
 **Tron gotchas:**
 - All hex is **bare** (no `0x`): transaction-level addresses are 21-byte `41…` hex; **log addresses use the 20-byte EVM-style form without `41`**; topics/sighashes plain hex
@@ -123,12 +130,12 @@ Request methods on `TronQueryBuilder`: `addTransaction` (by contract `type`), `a
 `@subsquid/pipes/bitcoin` streams `bitcoin-mainnet` with a UTXO-model API.
 
 ```typescript
-import { BitcoinQueryBuilder, bitcoinPortalStream } from '@subsquid/pipes/bitcoin'
+import { bitcoinPortalStream, bitcoinQuery } from '@subsquid/pipes/bitcoin'
 
 const stream = bitcoinPortalStream({
   id: 'bitcoin-utxo',
   portal: 'https://portal.sqd.dev/datasets/bitcoin-mainnet',
-  outputs: new BitcoinQueryBuilder()
+  outputs: bitcoinQuery()
     .addFields({
       block: { number: true, hash: true, timestamp: true },
       transaction: { transactionIndex: true, txid: true, size: true },
@@ -137,7 +144,7 @@ const stream = bitcoinPortalStream({
       output: { transactionIndex: true, outputIndex: true, value: true,
                 scriptPubKeyType: true, scriptPubKeyAddress: true, scriptPubKeyAsm: true },
     })
-    .addTransaction({
+    .addTransactionRequest({
       request: { inputs: true, outputs: true },
       range: { from: 900_000, to: 900_002 },
     }),
@@ -150,7 +157,7 @@ for await (const { data } of stream) {
 }
 ```
 
-Request methods on `BitcoinQueryBuilder`: `addTransaction` (`{inputs, outputs}` relation flags), `addInput` (`type`/`prevoutScriptPubKeyAddress`/`prevoutScriptPubKeyType`/`prevoutGenerated` + `transaction`/`transactionInputs`/`transactionOutputs`), `addOutput` (`scriptPubKeyAddress`/`scriptPubKeyType` + relation flags), `includeAllBlocks`.
+Request methods on the Bitcoin query builder: `addTransactionRequest` (`{inputs, outputs}` relation flags), `addInputRequest` (`type`/`prevoutScriptPubKeyAddress`/`prevoutScriptPubKeyType`/`prevoutGenerated` + `transaction`/`transactionInputs`/`transactionOutputs`), `addOutputRequest` (`scriptPubKeyAddress`/`scriptPubKeyType` + relation flags), `includeAllBlocks`.
 
 **Bitcoin gotchas:**
 - Values are **BTC floats** (Bitcoin Core convention), not satoshis
@@ -176,7 +183,7 @@ Framework errors carry unique codes linking to docs (`https://docs.sqd.dev/en/sd
 | `BlockRangeConfigurationError` | E0002 | Inverted range, invalid date with `'latest'`, unresolvable timestamp |
 | `InstructionDecoderConfigurationError` | E0003 | Solana decoder built with an unusable discriminator set (missing, duplicated, or mixed-width discriminators) |
 
-Configuration errors are E0xxx; target errors are E1xxx–E2xxx (ClickHouse, Postgres, BigQuery, Parquet each own a code block).
+Configuration errors are E0xxx; target errors are E1xxx–E2xxx (ClickHouse, Postgres, BigQuery, Parquet, and Pub/Sub each own a code block).
 
 ## Decode-Error Hook (`onError`)
 
@@ -267,8 +274,8 @@ it('should decode ERC20 transfers', async () => {
     outputs: evmEventDecoder({
       range: { from: 0, to: 1 },
       events: { transfers: commonAbis.erc20.events.Transfer },
-    }),
-  }).pipe((batch) => batch.transfers)
+    }).pipe((batch) => batch.transfers),
+  })
 
   const transfers = await readAll(stream)
   expect(transfers).toHaveLength(1)
@@ -297,16 +304,16 @@ it('should test custom transformations', async () => {
     outputs: evmEventDecoder({
       range: { from: 0, to: 1 },
       events: { transfers: commonAbis.erc20.events.Transfer },
-    }),
+    })
+      .pipe((batch) => batch.transfers)
+      .pipe((transfers) =>
+        transfers.map((t) => ({
+          from: t.event.from,
+          to: t.event.to,
+          amount: Number(t.event.value) / 1e6,
+        })),
+      ),
   })
-    .pipe((batch) => batch.transfers)
-    .pipe((transfers) =>
-      transfers.map((t) => ({
-        from: t.event.from,
-        to: t.event.to,
-        amount: Number(t.event.value) / 1e6,
-      })),
-    )
 
   const results = await readAll(stream)
   expect(results[0]).toEqual({ from: ALICE, to: BOB, amount: 2 })
@@ -318,7 +325,7 @@ it('should test custom transformations', async () => {
 - `encodeEvent` accepts `abi`, `eventName`, `address`, and typed `args`
 - `mockBlock` auto-generates `number`, `hash`, `timestamp` — call `resetMockBlockCounter()` in `beforeEach`
 - `mockEvmPortalStream` returns `{ url, close() }` — use `portal.url` with `evmPortalStream`
-- Chain `.pipe()` on the stream to test transformations
+- Chain `.pipe()` on the decoder/query output inside `outputs` to test transformations
 - Multiple event types: pass multiple in `events: { transfers: ..., approvals: ... }` and access `batch.transfers`, `batch.approvals`
 - A parallel Bitcoin testing surface exists at `@subsquid/pipes/testing/bitcoin` (same mock-block / mock-stream shape for the UTXO model)
 
@@ -369,7 +376,7 @@ The CLI-generated `enrichEvents` helper divides by 1000 and emits **unix seconds
 
 ## Target Configuration
 
-Available targets: ClickHouse, PostgreSQL (Drizzle), BigQuery, Parquet. (A `memory` target exists in source but is **not** exported from the package — still true in `1.0.0-beta.1`: there is no `./targets/memory` export, so `createMemoryTarget` is internal/testing-only and cannot be imported by consumers.)
+Available targets: ClickHouse, PostgreSQL (Drizzle), BigQuery, Parquet, and Google Pub/Sub. (A `memory` target exists in source but is **not** exported from the package; still true in `1.0.0-beta.4`. There is no `./targets/memory` export, so `createMemoryTarget` is internal/testing-only and cannot be imported by consumers.)
 
 ### ClickHouse
 
@@ -381,8 +388,8 @@ stream.pipeTo(clickhouseTarget({
   onData: async ({ store, data, ctx }) => {
     await store.insert({ table: 'transfers', values: data.transfers, format: 'JSONEachRow' })
   },
-  onRollback: async ({ type, store, safeCursor }) => {
-    // type: 'offset_check' (startup) | 'blockchain_fork' (reorg)
+  onRollback: async ({ reason, store, safeCursor }) => {
+    // reason: 'recovery' (startup) | 'fork' (chain reorg)
     await store.removeAllRows({
       tables: 'transfers',
       where: 'block_number > {latest:UInt32}',
@@ -420,7 +427,9 @@ stream.pipeTo(drizzleTarget({
 
 **Insert via `tx`, not `ctx.db`.** Each `onData` batch runs inside the target's snapshot/rollback transaction, and `tx` is that transaction handle. Writing through `ctx.db` bypasses it, so the rows escape the rollback snapshot and a reorg can't undo them. The callback takes **one** destructured object `{ tx, data, ctx }` — not two positional args. Use `chunkForInsert` (named `batchForInsert`/`chunk` before the beta line), exported from `@subsquid/pipes/targets/drizzle/node-postgres`, to split large batches under Postgres's 32767-parameter limit.
 
-### BigQuery (alpha.16)
+Beta.3 fixed Drizzle snapshot triggers and rollback to use real database column names rather than TypeScript property names.
+
+### BigQuery
 
 ```typescript
 import { BigQuery } from '@google-cloud/bigquery'
@@ -450,7 +459,42 @@ stream.pipeTo(bigqueryTarget({
 
 Key facts: tables auto-create with `PARTITION BY RANGE_BUCKET(block_number, …)` (partition column forced `INT64 NOT NULL`); declared schema is enforced against existing tables (fails fast on mismatch); reorgs run bounded `DELETE`s per tracked table, resumed idempotently after crashes. An optional `onBeforeRollback: async ({ cursor }) => ...` fires after the safe cursor resolves, before the per-table `DELETE`s. Gotchas: `TIMESTAMP` wire format is INT64 **microseconds** (`date.getTime() * 1000` — ISO strings are NOT parsed); uint256 overflows BIGNUMERIC (38 integer digits) — clamp and keep the exact decimal in a STRING column.
 
-### Parquet (alpha.16)
+### Google Pub/Sub (beta.2+, current protocol in beta.4)
+
+```typescript
+import { PubSub } from '@google-cloud/pubsub'
+import { pubsubTarget } from '@subsquid/pipes/targets/pubsub'
+
+stream.pipeTo(pubsubTarget({
+  pubsub: new PubSub({ projectId: process.env.GOOGLE_CLOUD_PROJECT }),
+  state: { path: './state/transfers.sqlite' }, // cursor, rollback manifest, outbox, sequence
+  namespace: 'base-erc20',
+  topics: {
+    transfers: {
+      topic: 'evm.base.erc20-transfers',
+      map: ({ data }) => data.map((t) => ({
+        data: {
+          _id: `${t.block.hash}:${t.rawEvent.logIndex}`,
+          token: t.rawEvent.address,
+          from: t.event.from,
+          to: t.event.to,
+          amount: t.event.value,
+          block: t.block.number,
+          timestamp: t.timestamp,
+        },
+        block: t.block,
+        attributes: { token: t.rawEvent.address },
+      })),
+    },
+  },
+}))
+```
+
+`topics` routes emit BigQuery CDC-compatible JSON rows with `_id`, `_CHANGE_TYPE`, and `_CHANGE_SEQUENCE_NUMBER`; fork repair emits a later `DELETE` or restoring `UPSERT`. `bigint` encodes as a decimal string and `Date` as RFC 3339, so choose destination column types accordingly. The SQLite state file is load-bearing: keep it on durable storage and run one producer per path. Losing its sequence counter can cause BigQuery to ignore lower replacement sequence numbers.
+
+Beta.4 also supports `signals` routes for application-defined payloads. A signal route must choose `fork: { mode: 'boundary', map }` (consumer unwinds after an epoch/boundary message) or `fork: { mode: 'finalized-only' }`; do not attach a BigQuery subscription to a signal topic because signals omit the CDC fields. Pub/Sub delivery is at-least-once. When upgrading from the initial Pub/Sub state/protocol, drain the old outbox and use fresh state plus a fresh namespace; there is no in-place state-v2 migration.
+
+### Parquet
 
 ```typescript
 import { parquetTarget } from '@subsquid/pipes/targets/parquet'
@@ -473,6 +517,10 @@ stream.pipeTo(parquetTarget({
 ```
 
 Key facts: writes **finalized-only** rotating files (`<min>-<max>.parquet`) readable directly by DuckDB/Spark/Athena/ClickHouse `s3()`; constant memory; crash-safe via a durable cursor file (`_sqd_parquet_state.json`). Leaf column types: `INT64`, `INT32`, `UTF8`, `BYTE_ARRAY`, `BOOLEAN`, `DOUBLE`, `TIMESTAMP`, `DATE`, `JSON` (plus nested `LIST` and `STRUCT`); `DECIMAL` is unsupported (use `UTF8` or a scaled `INT64`). Compression codecs (`settings.compression`): `UNCOMPRESSED`, `SNAPPY` (default), `GZIP`, `BROTLI`. Requires optional peer dep `@dsnp/parquetjs`. `onData` must be a pure function of the batch (recovery re-processes finalized blocks and expects byte-identical rows).
+
+### Finalized-only target semantics (beta.2+)
+
+Parquet and other finalized-only targets now declare `requiresFinalizedStream: true`; the source reads `/finalized-stream` directly instead of buffering hot blocks. A bounded range whose `to` is above the finalized head waits until those blocks finalize. On a dataset that never advances finality, that range does not complete, so CI/cron backfills should end at or below the finalized head. Custom finalized-only targets should set the same flag and write rows as they arrive; `createFinalizationBuffer`, `finalizationBuffer`, and the `Finalization` state type are removed.
 
 ## Cursor Keying — Upgrading to alpha.15
 

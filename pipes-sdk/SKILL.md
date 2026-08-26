@@ -10,7 +10,7 @@ allowed-tools:
   - Grep
 metadata:
   author: subsquid
-  version: "1.3.0"
+  version: "1.4.0"
   category: core
 ---
 
@@ -26,7 +26,7 @@ Activate when the user wants to:
 - **Optimize sync performance** — slow indexing, high memory, large ranges
 - **Validate data quality** — NULL checks, gaps, malformed addresses, duplicate events
 - **Deploy an indexer** — local Docker or ClickHouse Cloud
-- **Write to analytics sinks** — ClickHouse, PostgreSQL (Drizzle), BigQuery, Parquet files
+- **Write to analytics sinks:** ClickHouse, PostgreSQL (Drizzle), BigQuery, Parquet files, Google Pub/Sub
 - **Turn a Portal handoff into durable infrastructure** — when a Portal MCP answer or curl export is not enough
 
 Common trigger phrases: *"create a new indexer"*, *"my indexer crashed"*, *"error"*, *"not working"*, *"slow"*, *"optimize"*, *"deploy to ClickHouse Cloud"*, *"track X events on Ethereum/Solana/Tron/Bitcoin/Hyperliquid"*.
@@ -54,9 +54,9 @@ Before scaffolding, say why Pipes is the right surface. Portal MCP is best for b
 
 **CLI:** `@subsquid/pipes-cli@1.0.0-beta.2`. Always use programmatic mode via `--config '{...}'` (a JSON string or a path to a config file). **Never create indexer files manually** — that bypasses scaffolding, dependency setup, and configuration.
 
-**npm dist-tags:** the SDK is in **1.0.0 beta** — `@subsquid/pipes` `latest` now points to `1.0.0-beta.1`, so a bare `npm install @subsquid/pipes` is correct (the old advice to install `@alpha` is obsolete). The CLI trap remains: `@subsquid/pipes-cli@latest` is still the *old* `1.0.0-alpha.1` — keep the explicit `pipes-cli@1.0.0-beta.2` pin (or use the `beta` dist-tag).
+**npm dist-tags (verified 2026-08-26):** the SDK is in **1.0.0 beta**. `@subsquid/pipes@latest` and the CLI-generated `^1.0.0-beta.1` range install `1.0.0-beta.3`, while `@subsquid/pipes@beta` is `1.0.0-beta.4`. Pin beta.4 explicitly when using its Pub/Sub signals or lag metrics. The CLI trap remains: `@subsquid/pipes-cli@latest` is still the old `1.0.0-alpha.1`; keep the explicit `pipes-cli@1.0.0-beta.2` pin (or use its `beta` dist-tag). Recheck tags with `npm view @subsquid/pipes dist-tags --json` before changing pins.
 
-**Beta renamed several SDK exports.** Current names: `evmEventDecoder` (was `evmDecoder`), `mockEvmPortalStream` (was `evmPortalMockStream`), `chunkForInsert` (was `batchForInsert`/`chunk`); the `evmPortalSource`/`solanaPortalSource`/`hyperliquidFillsPortalSource` aliases are gone — only the `*PortalStream` names exist. Projects scaffolded by the old alpha CLI pinned the floating `"alpha"` dist-tag, which now resolves to `1.0.0-alpha.21` (already renamed) — so an old project can break on a fresh `npm install` with `evmDecoder is not a function`/import errors. Fix: rename to the new APIs, or pin the SDK version the code was written for (e.g. `1.0.0-alpha.16`).
+**Beta hard-renamed the SDK surface.** Current names include `evmEventDecoder` (was `evmDecoder`), `mockEvmPortalStream` (was `evmPortalMockStream`), `chunkForInsert` (was `batchForInsert`/`chunk`), and `add*Request` query-builder methods (for example, `addLogRequest` and `addInstructionRequest`). The `evmPortalSource`/`solanaPortalSource`/`hyperliquidFillsPortalSource` aliases are gone; only the `*PortalStream` names exist. Transform a raw query with `query.build().pipe(...)` and pass the result as `outputs`; source-level `.pipe()` is gone. Projects scaffolded by the old alpha CLI pinned the floating `"alpha"` dist-tag, which now resolves to `1.0.0-alpha.22`, so an old project can break on a fresh install. Use the full rename map in [SDK_FEATURES.md](references/SDK_FEATURES.md#renamed-in-the-beta-line), or pin the exact old SDK version temporarily.
 
 ## Known CLI Quirks
 
@@ -182,7 +182,7 @@ Match the user's symptom to a pattern. Full diagnostics in [TROUBLESHOOTING.md](
 | `ZSTD_error_prefix_unknown` | Node v25+ zstd bug | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-9-nodejs-version-compatibility-issues) |
 | `evmDecoder is not a function` / import not found after reinstall | Floating `"alpha"` pin pulled the renamed beta-line API | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-11-renamed-sdk-exports-after-reinstall) |
 | Hyperliquid validate counts wildly off | SDK vs Portal block batching | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-10-hyperliquid-validation--sdk-vs-portal-block-batching) |
-| `addFill ... reading 'from'` | Missing `range` on `addFill()` | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-10b-hyperliquid-addfill-missing-range) |
+| `addFillRequest ... reading 'from'` | Missing `range` on `addFillRequest()` | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-10b-hyperliquid-addfillrequest-missing-range) |
 
 Standard diagnostic flow: read error → match pattern → read `src/index.ts`, `package.json`, `.env` → apply fix → restart → validate data.
 
@@ -196,7 +196,7 @@ The Pipes SDK is feature-rich — a handful of patterns cover 80% of use cases.
 - **Multi-output decoders**: run multiple named decoders in one pipeline via `outputs: { transfers: ..., swaps: ... }` — see [PATTERNS.md](references/PATTERNS.md#5-parallel-event-decoding-multi-output).
 - **SDK 1.0 features**: time-based ranges, `defineAbi`, typed errors, testing library — see [SDK_FEATURES.md](references/SDK_FEATURES.md).
 - **Tron & Bitcoin streams**: native query builders and portal streams for `tron-mainnet` and `bitcoin-mainnet` — see [SDK_FEATURES.md](references/SDK_FEATURES.md#tron-portal-streams).
-- **BigQuery & Parquet targets**: `bigqueryTarget` (auto-created partitioned tables, fork-safe DELETEs) and `parquetTarget` (finalized-only rotating files for DuckDB/Spark/Athena) — see [SDK_FEATURES.md](references/SDK_FEATURES.md#target-configuration).
+- **BigQuery, Parquet & Pub/Sub targets:** `bigqueryTarget` (partitioned tables, fork-safe DELETEs), `parquetTarget` (finalized-only rotating files), and `pubsubTarget` (BigQuery CDC rows or application-defined signals with fork handling). See [SDK_FEATURES.md](references/SDK_FEATURES.md#target-configuration).
 - **Pipe-id-keyed cursors (alpha.15+)**: targets key sync state by the pipe `id`, so multiple pipes can share one database. Legacy ClickHouse cursors migrate automatically — see [SDK_FEATURES.md](references/SDK_FEATURES.md#cursor-keying--upgrading-to-alpha15).
 - **Beta rename map**: current names are `evmEventDecoder`, `evmPortalStream`, `solanaPortalStream`, `hyperliquidFillsPortalStream`, `mockEvmPortalStream`, `chunkForInsert`. Code from alpha-era scaffolds may still say `evmDecoder` or `evmPortalSource` (a removed alias of `evmPortalStream`) — see [SDK_FEATURES.md](references/SDK_FEATURES.md#renamed-in-the-beta-line) before "fixing" either spelling.
 - **Portal response cache**: `portalSqliteCache` (from `@subsquid/pipes/portal-cache/node`) caches Portal stream responses on disk (SQLite + zstd) to speed up re-runs and backfills over the same range; wire it via the stream's `cache` option — see [SDK_FEATURES.md](references/SDK_FEATURES.md).
@@ -273,5 +273,5 @@ Dashboard-grade ClickHouse patterns (time bucketing, conditional aggregation, pa
 
 ## Related
 
-- **portal** — query blockchain data across 200+ chains via Portal MCP or the SQD Portal Stream API. Use it to verify contract events, discover dataset names, cross-check indexed data, and decide when a query should become a Pipes/Squid pipeline.
+- **portal:** query blockchain data across 140+ networks via Portal MCP or the SQD Portal Stream API. Use it to verify contract events, discover dataset names, cross-check indexed data, and decide when a query should become a Pipes/Squid pipeline.
 - **Ponder on Portal** — if the user already has a [Ponder](https://ponder.sh) indexer, [`@subsquid/ponder`](https://docs.sqd.dev/en/sdk/alternative-clients/ponder) backs its historical sync with Portal as a drop-in (same handlers/schema; one `portal:` line per chain) — no Pipes rewrite needed.

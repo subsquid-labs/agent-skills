@@ -6,7 +6,7 @@ Each entry maps back to a step in `SKILL.md`.
 
 ## Both chains (v2-with-`apiKey`)
 
-> The v2 gateway requires authentication as of **May 19, 2026 12:00 UTC** for self-hosted setups (Cloud is unaffected). Migrating to Portal is the recommended path — it needs no API key. The v2-with-`apiKey` config below is the alternative for squids that must stay on v2 a bit longer. See <https://docs.sqd.dev/changelog/gateway-api-keys>.
+> The v2 gateway requires authentication as of **May 19, 2026 12:00 UTC** for self-hosted setups (Cloud is unaffected). Migrating to Portal is the recommended path. The public Portal is shared capacity; authenticated and dedicated Portal endpoints accept `x-api-key`. The v2-with-`apiKey` config below is the alternative for squids that must stay on v2 a bit longer. See <https://docs.sqd.dev/changelog/gateway-api-keys>.
 
 ### `TS2353: 'apiKey' does not exist in type 'GatewaySettings'`
 
@@ -40,7 +40,7 @@ Symptom: `HttpError: Got 401 from https://v2.archive.subsquid.io/network/...` or
 
 **Cause:** the v2 gateway requires API-key authentication from May 19, 2026 12:00 UTC onward. Cloud-hosted squids are not affected (Cloud injects the key). RPC-only squids (no `setGateway`) are not affected.
 
-**Fix:** add an API key as above. Either pin the v2 package version that supports `apiKey` (`@subsquid/evm-processor@^1.30.0` / `@subsquid/solana-stream@^0.5.0`) and use the object form of `setGateway`, or complete the Portal migration in the rest of this skill (`setGateway` is replaced by `setPortal`, which doesn't require a key).
+**Fix:** add an API key as above. Either pin the v2 package version that supports `apiKey` (`@subsquid/evm-processor@^1.30.0` / `@subsquid/solana-stream@^0.5.0`) and use the object form of `setGateway`, or complete the Portal migration in the rest of this skill (`setGateway` is replaced by `setPortal`; use the access mode configured for that Portal endpoint).
 
 ---
 
