@@ -83,7 +83,7 @@ Why is my indexer syncing slowly?
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on adding or editing skills.
+Open a focused pull request and validate every changed skill with the `skills-ref` command documented in [AGENTS.md](./AGENTS.md#validation).
 
 ## License
 

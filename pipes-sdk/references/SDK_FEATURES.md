@@ -62,6 +62,7 @@ import { defineAbi } from '@subsquid/pipes'
 const erc20 = defineAbi(erc20Json)
 
 evmEventDecoder({
+  range: { from: '2024-01-01' },
   events: {
     transfers: erc20.events.Transfer,
     approvals: erc20.events.Approval,
@@ -327,7 +328,7 @@ it('should test custom transformations', async () => {
 - `mockEvmPortalStream` returns `{ url, close() }` — use `portal.url` with `evmPortalStream`
 - Chain `.pipe()` on the decoder/query output inside `outputs` to test transformations
 - Multiple event types: pass multiple in `events: { transfers: ..., approvals: ... }` and access `batch.transfers`, `batch.approvals`
-- A parallel Bitcoin testing surface exists at `@subsquid/pipes/testing/bitcoin` (same mock-block / mock-stream shape for the UTXO model)
+- Bitcoin currently exposes `mockBitcoinRpc` at `@subsquid/pipes/testing/bitcoin`; it records JSON-RPC calls and lets tests return controlled bitcoind results. It does not provide EVM-style mock blocks or a mock Portal stream.
 
 ## Decoded Event Field Access in `.pipe()`
 
@@ -497,7 +498,7 @@ Beta.4 also supports `signals` routes for application-defined payloads. A signal
 ### Parquet
 
 ```typescript
-import { parquetTarget } from '@subsquid/pipes/targets/parquet'
+import { parquetTarget, parquetjsEngine } from '@subsquid/pipes/targets/parquet'
 
 stream.pipeTo(parquetTarget({
   dir: './parquet-out',
@@ -511,12 +512,15 @@ stream.pipeTo(parquetTarget({
       amount: { type: 'UTF8' },                  // uint256 fits no Parquet numeric — keep decimal text
     },
   }],
-  settings: { rollover: { maxBytes: 128 * 1024 * 1024 }, compression: 'SNAPPY' },
+  settings: {
+    rollover: { maxBytes: 128 * 1024 * 1024 },
+    engine: parquetjsEngine({ compression: 'SNAPPY' }),
+  },
   onData: ({ store, data }) => { store.insert('transfers', data.transfers.map(t => ({ /* row */ }))) },
 }))
 ```
 
-Key facts: writes **finalized-only** rotating files (`<min>-<max>.parquet`) readable directly by DuckDB/Spark/Athena/ClickHouse `s3()`; constant memory; crash-safe via a durable cursor file (`_sqd_parquet_state.json`). Leaf column types: `INT64`, `INT32`, `UTF8`, `BYTE_ARRAY`, `BOOLEAN`, `DOUBLE`, `TIMESTAMP`, `DATE`, `JSON` (plus nested `LIST` and `STRUCT`); `DECIMAL` is unsupported (use `UTF8` or a scaled `INT64`). Compression codecs (`settings.compression`): `UNCOMPRESSED`, `SNAPPY` (default), `GZIP`, `BROTLI`. Requires optional peer dep `@dsnp/parquetjs`. `onData` must be a pure function of the batch (recovery re-processes finalized blocks and expects byte-identical rows).
+Key facts: writes **finalized-only** rotating files (`<min>-<max>.parquet`) readable directly by DuckDB/Spark/Athena/ClickHouse `s3()`; constant memory; crash-safe via a durable cursor file (`_sqd_parquet_state.json`). Leaf column types: `INT64`, `INT32`, `UTF8`, `BYTE_ARRAY`, `BOOLEAN`, `DOUBLE`, `TIMESTAMP`, `DATE`, `JSON` (plus nested `LIST` and `STRUCT`); `DECIMAL` is unsupported (use `UTF8` or a scaled `INT64`). Configure `UNCOMPRESSED`, `SNAPPY` (default), `GZIP`, or `BROTLI` through `parquetjsEngine({ compression })` or per-column compression, not as a top-level target setting. Requires optional peer dep `@dsnp/parquetjs`. `onData` must be a pure function of the batch (recovery re-processes finalized blocks and expects byte-identical rows).
 
 ### Finalized-only target semantics (beta.2+)
 

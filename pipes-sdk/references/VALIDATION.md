@@ -61,24 +61,19 @@ FROM <table_name>;
 
 ### Level 3: Completeness (MEDIUM PRIORITY)
 
+Event tables are sparse by definition: a block with no matching event produces no row. Do not treat gaps between event-bearing block numbers as ingestion gaps. Validate a bounded range against the same Portal filter instead.
+
 ```sql
--- Block coverage
+-- Bound the comparison to the exact range used in the Portal control query
 SELECT
-  MIN(block_number) as min_block,
-  MAX(block_number) as max_block,
-  COUNT(DISTINCT block_number) as unique_blocks
-FROM <table_name>;
+  count() AS event_count,
+  uniqExact(tuple(transaction_hash, log_index)) AS unique_events,
+  min(block_number) AS first_event_block,
+  max(block_number) AS last_event_block
+FROM <table_name> FINAL
+WHERE block_number BETWEEN <from_block> AND <to_block>;
 
--- Detect block gaps
-SELECT
-  block_number,
-  block_number - lag(block_number) OVER (ORDER BY block_number) as gap
-FROM (
-  SELECT DISTINCT block_number FROM <table_name> ORDER BY block_number
-)
-WHERE gap > 1;
-
--- Outliers in event density
+-- Outliers in event density (diagnostic only)
 SELECT
   block_number,
   COUNT(*) as event_count
@@ -90,8 +85,8 @@ LIMIT 10;
 ```
 
 **Checks:**
-- Block range matches expected
-- No gaps in block sequence
+- Count and `(transaction_hash, log_index)` identities match the closest Portal query over the same filter and bounded range
+- If full block coverage matters, persist a separate block-coverage table; do not infer it from an event table
 - Event counts reasonable
 - No duplicate events (same `tx_hash` + `log_index`)
 
@@ -125,9 +120,9 @@ WHERE block_timestamp < prev_timestamp;
 **Cause:** Incorrect extraction or transformation.
 **Fix:** Validate address format in the transformer.
 
-### Issue 3: Block Gaps
-**Cause:** Indexer crashed and didn't resume properly.
-**Fix:** Clear sync table and restart from the affected block.
+### Issue 3: Portal Cross-Check Mismatch
+**Cause:** Range/filter mismatch, wrong ABI or proxy implementation, decoder differences, or an incorrect resume cursor.
+**Fix:** Compare the same bounded range and filter, inspect missing event identities, and only reset the confirmed pipe cursor after identifying the cause.
 
 ## Final Checklist
 
@@ -137,10 +132,10 @@ Before declaring success:
 - [ ] No NULL values in required fields
 - [ ] All addresses valid (42 chars, `0x` prefix, hex)
 - [ ] All transaction hashes valid (66 chars)
-- [ ] Block range complete (no gaps)
+- [ ] Bounded Portal count and event identities match
 - [ ] Data count increasing over time
 - [ ] Sample transactions match block explorer
 
 ## Hyperliquid Note
 
-For Hyperliquid indexers, Portal cross-reference counts drift from ClickHouse counts because of SDK block batching. Use field-level spot-checks as primary verification, not count comparisons. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) Error Pattern 10.
+For Hyperliquid indexers, compare stable row identities such as `(block_number, fill_index)` and remember that each trade has one bid fill and one ask fill. Aggregate market-wide notional over all fills only after dividing by two or selecting one side.

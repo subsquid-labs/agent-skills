@@ -4,14 +4,15 @@ Query patterns for building real-time dashboards on top of ClickHouse tables pop
 
 ## CollapsingMergeTree Basics
 
-Pipes SDK uses `CollapsingMergeTree(sign)` for reorg handling. **Every analytics query must filter `sign = 1`** to exclude cancelled rows:
+Pipes SDK uses `CollapsingMergeTree(sign)` for reorg handling. A rollback appends a matching row with `sign = -1`; filtering to `sign = 1` leaves the original row visible and is therefore not rollback-safe.
+
+Use `FINAL` for correctness-first row and aggregate queries:
 
 ```sql
-SELECT count() FROM hl_fills WHERE sign = 1
--- Without: may count rows that were rolled back
+SELECT count() FROM hl_fills FINAL
 ```
 
-This is the most common bug in dashboard queries. Always include it.
+For high-volume reversible aggregates, you can avoid `FINAL` by including the sign in the arithmetic, for example `sum(notional * sign)` or `sum(sign)`. Aggregates such as `min`, `max`, and exact unique counts generally need `FINAL` (or a separately maintained aggregate design) because they cannot be reversed by multiplying the result by `sign`.
 
 ## Time Bucketing
 
@@ -21,8 +22,7 @@ This is the most common bug in dashboard queries. Always include it.
 SELECT
   toStartOfInterval(timestamp, INTERVAL 1 HOUR) AS t,
   sum(volume) AS volume
-FROM my_table
-WHERE sign = 1
+FROM my_table FINAL
 GROUP BY t
 ORDER BY t
 ```
@@ -76,8 +76,14 @@ interface QueryParams {
   window?: string
 }
 
-function buildWhereClause(params: QueryParams, extraConditions: string[] = []): string {
-  const conditions = ['sign = 1']
+interface WhereClause {
+  clause: string
+  queryParams: Record<string, string>
+}
+
+function buildWhereClause(params: QueryParams, extraConditions: string[] = []): WhereClause {
+  const conditions: string[] = []
+  const queryParams: Record<string, string> = {}
 
   if (params.window !== 'all') {
     const windowSql = WINDOW_MAP[params.window || '24h'] || '24 HOUR'
@@ -85,19 +91,29 @@ function buildWhereClause(params: QueryParams, extraConditions: string[] = []): 
   }
 
   if (params.coin) {
-    conditions.push(`coin = '${params.coin.replace(/'/g, '')}'`)
+    conditions.push('coin = {coin:String}')
+    queryParams.coin = params.coin
   }
 
+  // Only pass trusted, static SQL fragments here. Parameterize user input.
   conditions.push(...extraConditions)
-  return conditions.join(' AND ')
+  return {
+    clause: conditions.length > 0 ? conditions.join(' AND ') : '1',
+    queryParams,
+  }
 }
 ```
 
 Usage:
 
 ```typescript
-const where = buildWhereClause(params, ['crossed = 1'])
-const sql = `SELECT ... FROM hl_fills WHERE ${where} GROUP BY t ORDER BY t`
+const { clause, queryParams } = buildWhereClause(params, ['crossed = 1'])
+const sql = `SELECT ... FROM hl_fills FINAL WHERE ${clause} GROUP BY t ORDER BY t`
+const result = await client.query({
+  query: sql,
+  query_params: queryParams,
+  format: 'JSONEachRow',
+})
 ```
 
 ## Conditional Aggregation with sumIf / countIf
@@ -108,11 +124,11 @@ ClickHouse's `*If` combinators are powerful for computing multiple metrics in a 
 -- Volume split by side
 SELECT
   toStartOfInterval(timestamp, INTERVAL 1 HOUR) AS t,
-  sumIf(notional, side = 'Buy') AS buy_volume,
-  sumIf(notional, side = 'Sell') AS sell_volume,
-  sumIf(notional, side = 'Buy') - sumIf(notional, side = 'Sell') AS delta
-FROM hl_fills
-WHERE sign = 1 AND crossed = 1
+  sumIf(notional, side = 'Bid') AS bid_volume,
+  sumIf(notional, side = 'Ask') AS ask_volume,
+  sumIf(notional, side = 'Bid') - sumIf(notional, side = 'Ask') AS delta
+FROM hl_fills FINAL
+WHERE crossed = 1
 GROUP BY t
 ORDER BY t
 ```
@@ -124,8 +140,7 @@ SELECT
   sumIf(fee, crossed = 1) AS taker_fees,
   sumIf(fee, crossed = 0) AS maker_fees,
   sum(fee) AS total_fees
-FROM hl_fills
-WHERE sign = 1
+FROM hl_fills FINAL
 GROUP BY t
 ORDER BY t
 ```
@@ -134,17 +149,16 @@ ORDER BY t
 -- Stats summary
 SELECT
   count() AS fill_count,
-  sum(notional) AS total_volume,
+  sum(notional) / 2 AS total_volume,
   sumIf(notional, crossed = 1) AS taker_volume,
-  round(sumIf(notional, crossed = 1) / sum(notional) * 100, 2) AS taker_pct,
+  round(sumIf(notional, crossed = 1) / (sum(notional) / 2) * 100, 2) AS taker_pct,
   sum(fee) AS total_fees,
   countIf(closed_pnl < -1000
     AND dir IN ('Close Long', 'Close Short')
     AND start_position != 0
     AND abs(closed_pnl) > notional * 0.1
   ) AS liquidation_count
-FROM hl_fills
-WHERE sign = 1
+FROM hl_fills FINAL
 ```
 
 ## Common Analytics Queries
@@ -154,10 +168,10 @@ WHERE sign = 1
 ```sql
 SELECT
   coin,
-  sum(notional) AS volume,
+  sum(notional) / 2 AS volume,
   count() AS fills
-FROM hl_fills
-WHERE sign = 1 AND timestamp > now() - INTERVAL 24 HOUR
+FROM hl_fills FINAL
+WHERE timestamp > now() - INTERVAL 24 HOUR
 GROUP BY coin
 ORDER BY volume DESC
 LIMIT 10
@@ -170,10 +184,10 @@ SELECT
   toStartOfInterval(timestamp, INTERVAL 1 HOUR) AS t,
   coin,
   count() AS large_fills,
-  sum(notional) AS large_volume,
+  sum(notional) / 2 AS large_volume,
   max(notional) AS max_fill
-FROM hl_fills
-WHERE sign = 1 AND notional > 100000
+FROM hl_fills FINAL
+WHERE notional > 100000
 GROUP BY t, coin
 ORDER BY t, large_volume DESC
 ```
@@ -185,9 +199,8 @@ Hyperliquid doesn't flag liquidations explicitly. This heuristic detects them:
 ```sql
 SELECT
   timestamp, user, coin, dir, px, sz, notional, closed_pnl, fee
-FROM hl_fills
-WHERE sign = 1
-  AND closed_pnl < -1000
+FROM hl_fills FINAL
+WHERE closed_pnl < -1000
   AND dir IN ('Close Long', 'Close Short')
   AND start_position != 0
   AND abs(closed_pnl) > notional * 0.1
@@ -209,9 +222,8 @@ SELECT
   count() AS liquidations,
   sum(notional) AS liquidation_volume,
   sum(abs(closed_pnl)) AS total_loss
-FROM hl_fills
-WHERE sign = 1
-  AND closed_pnl < -1000
+FROM hl_fills FINAL
+WHERE closed_pnl < -1000
   AND dir IN ('Close Long', 'Close Short')
   AND start_position != 0
   AND abs(closed_pnl) > notional * 0.1
@@ -280,7 +292,7 @@ Use `LowCardinality(String)` for columns with limited distinct values:
 
 ```sql
 coin LowCardinality(String),     -- ~200 distinct values
-side LowCardinality(String),     -- 2 values: Buy, Sell
+side LowCardinality(String),     -- 2 values: Bid, Ask
 dir LowCardinality(String),      -- ~7 values
 user LowCardinality(String),     -- thousands, but still benefits
 fee_token LowCardinality(String) -- ~5 values
@@ -303,13 +315,17 @@ ORDER BY (block_number, coin, user, dir)
 ### Query-Level Optimizations
 
 ```sql
--- Use FINAL to force merge of CollapsingMergeTree rows (slower but accurate)
+-- Use FINAL to collapse rollback pairs before evaluating the query
 SELECT ... FROM hl_fills FINAL WHERE ...
 
--- Or filter sign = 1 (faster, works if inserts are correct)
-SELECT ... FROM hl_fills WHERE sign = 1 AND ...
+-- For reversible aggregates at high volume, account for both signs explicitly
+SELECT
+  sum(notional * sign) AS volume,
+  sum(sign) AS fill_count
+FROM hl_fills
+WHERE ...
 
--- Prefer sign = 1 for dashboards — FINAL is expensive on large tables
+-- Never use WHERE sign = 1 as a substitute for FINAL: it retains cancelled rows
 ```
 
 ```sql

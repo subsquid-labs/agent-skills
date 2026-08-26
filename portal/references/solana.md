@@ -51,7 +51,7 @@ curl -s 'https://portal.sqd.dev/datasets/solana-mainnet/stream' \
 - `instructions` - Array of instruction filter objects
 - `programId` - Program address (INDEXED - fast)
 - `d1/d2/d4/d8` - Discriminators (INDEXED - function selectors)
-- `a0-a31` - Account filters by position (INDEXED)
+- `a0-a15` - Account filters by position (INDEXED)
 - `mentionsAccount` - Account appears anywhere (INDEXED)
 
 ---
@@ -143,7 +143,7 @@ function getDiscriminator(name: string): string {
   "toBlock": 250001000,
   "instructions": [{
     "programId": ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],
-    "d8": ["0x5703feb8e7573909"]
+    "d8": ["0xe445a52e51cb9a1d"]
   }],
   "fields": {
     "instruction": {
@@ -214,7 +214,7 @@ function getDiscriminator(name: string): string {
 }
 ```
 
-**Notes:** `mentionsAccount` matches if the account appears ANYWHERE in accounts array. More expensive than `a0-a31` (position-specific) filters.
+**Notes:** `mentionsAccount` matches if the account appears ANYWHERE in accounts array. More expensive than `a0-a15` (position-specific) filters.
 
 ---
 
@@ -245,7 +245,7 @@ function getDiscriminator(name: string): string {
 
 **Notes:**
 - `a0` = first account in accounts array
-- `a1` = second account, `a2` = third, etc. (up to a31)
+- `a1` = second account, `a2` = third, etc. (up to `a15`)
 - More efficient than `mentionsAccount`
 - Use when you know the account position
 
@@ -262,7 +262,7 @@ function getDiscriminator(name: string): string {
   "toBlock": 250001000,
   "instructions": [{
     "programId": ["675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"],
-    "d8": ["0xf8c69e91e17587c8"]
+    "d1": ["0x09", "0x0b"]
   }],
   "fields": {
     "instruction": {
@@ -276,9 +276,9 @@ function getDiscriminator(name: string): string {
 
 **Dataset:** `solana-mainnet`
 **Program:** Raydium AMM V4
-**Function:** swap (example discriminator)
+**Functions:** SwapBaseIn (`0x09`) and SwapBaseOut (`0x0b`)
 **Notes:**
-- Raydium uses Anchor program (8-byte discriminators)
+- Raydium AMM V4 is not an Anchor program; it uses one-byte instruction tags
 - `accounts` array includes pool accounts, token accounts, etc.
 
 ---
@@ -365,7 +365,7 @@ function getDiscriminator(name: string): string {
 ```
 
 **Pool:** USDC/SOL pool address
-**Notes:** Position-based account filters (`a0`-`a31`) are more efficient than protocol-wide queries.
+**Notes:** Position-based account filters (`a0`-`a15`) are more efficient than protocol-wide queries.
 
 ---
 
@@ -543,12 +543,12 @@ function getDiscriminator(name: string): string {
 **Fast filterable fields (use these for filters):**
 - `programId` - INDEXED (always filter by this first - most selective)
 - `d1, d2, d4, d8` - INDEXED (discriminators)
-- `a0` through `a31` - INDEXED (account positions)
-- `mentionsAccount` - INDEXED (slower than a0-a31)
+- `a0` through `a15` - INDEXED (account positions)
+- `mentionsAccount` - INDEXED (slower than `a0-a15`)
 - `isCommitted` - INDEXED (success/failure)
 
 **Account filtering strategy:**
-- Use `a0-a31` when you know the account position (faster)
+- Use `a0-a15` when you know the account position (faster)
 - Use `mentionsAccount` when position is unknown or varies
 
 ---

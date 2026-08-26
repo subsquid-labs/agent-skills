@@ -154,20 +154,22 @@ evmEventDecoder({
 })
 ```
 
-### 3. Shared Sync Table Conflict
+### 3. Shared Sync Table Cursor Identity
 
 **SYMPTOM**: Indexer starts from wrong block (e.g., 27M instead of 21M)
 
-**Cause**: Multiple indexers share the same ClickHouse `sync` table.
+**Cause**: Current targets isolate cursor rows by the source pipe `id` (or explicit target `settings.id`). A conflict means two pipes reused the same id, or a legacy static `stream` cursor was migrated ambiguously.
 
 **Solution**:
 ```bash
-# Option A: Clear sync table before starting
-docker exec clickhouse clickhouse-client --password=default \
-  --query "TRUNCATE TABLE pipes.sync"
-
-# Option B: Use separate database
+# Preferred: use a separate database
 CLICKHOUSE_DATABASE=my_unique_db npm run dev
+
+# If sharing is deliberate, inspect ids and reset only the confirmed row
+docker exec clickhouse clickhouse-client --password=default \
+  --query "SELECT id, current, finalized FROM pipes.sync"
+docker exec clickhouse clickhouse-client --password=default \
+  --query "ALTER TABLE pipes.sync DELETE WHERE id = '<confirmed-pipe-id>' SETTINGS mutations_sync=1"
 ```
 
 **Prevention**: Always verify start block in logs:
@@ -248,9 +250,11 @@ The indexer reads the sync table and resumes from the last committed block. Veri
 **If you want a clean restart instead**:
 ```bash
 docker exec <container> clickhouse-client --password <pw> \
-  --query "DROP TABLE IF EXISTS pipes.sync; DROP TABLE IF EXISTS pipes.<your_table>"
+  --query "ALTER TABLE pipes.sync DELETE WHERE id = '<confirmed-pipe-id>' SETTINGS mutations_sync=1; DROP TABLE IF EXISTS pipes.<your_table>"
 npm run dev
 ```
+
+Inspect `SELECT id, current, finalized FROM pipes.sync` first and substitute the exact pipe id. Do not drop the shared `sync` table unless the database is proven to belong only to this pipe.
 
 **Note**: On first-ever start, the sync table does not exist yet. The SDK logs an error (`Unknown table expression identifier 'pipes.sync'`) and then creates it. This is harmless — do not treat it as a failure.
 
@@ -276,6 +280,7 @@ npm run dev
 ```typescript
 // BAD: Fetch all, filter client-side
 evmEventDecoder({
+  range: { from: '2024-01-01' },
   events: { transfer: commonAbis.erc20.events.Transfer },
 }).pipe((data) => {
   return data.transfer.filter(t => t.event.from === TARGET);
@@ -283,6 +288,7 @@ evmEventDecoder({
 
 // GOOD: Filter server-side
 evmEventDecoder({
+  range: { from: '2024-01-01' },
   events: {
     transfer: {
       event: commonAbis.erc20.events.Transfer,
@@ -431,7 +437,7 @@ npx @subsquid/evm-typegen@latest src/contracts \
 
 **Symptoms**: Second indexer resumes from wrong block, produces wrong data or no data
 
-**Cause**: All indexers write to `{database}.sync` with `id = 'stream'`. Sharing a database means the second indexer picks up the first's sync position.
+**Cause**: Two indexers reused the same source pipe `id` or explicit target `settings.id`, or a legacy pre-alpha.15 `stream` cursor was migrated to the wrong pipe.
 
 **Solution**: Use a dedicated database per indexer project:
 ```bash
@@ -442,11 +448,15 @@ docker exec <container> clickhouse-client --password <pw> \
   --query "CREATE DATABASE IF NOT EXISTS uniswap_swaps"
 ```
 
-If you must share a database, drop the sync table between indexer runs:
+If you must share a database, pin a unique id per pipe. Before a reset, inspect the table and delete only the confirmed cursor row:
 ```bash
 docker exec <container> clickhouse-client --password <pw> \
-  --query "DROP TABLE IF EXISTS <database>.sync"
+  --query "SELECT id, current, finalized FROM <database>.sync"
+docker exec <container> clickhouse-client --password <pw> \
+  --query "ALTER TABLE <database>.sync DELETE WHERE id = '<confirmed-pipe-id>' SETTINGS mutations_sync=1"
 ```
+
+Do not drop or truncate a shared `sync` table; that resets every pipe using it.
 
 ### Issue 9: Custom Template Table Names
 
@@ -489,9 +499,9 @@ timestamp: d.timestamp.getTime(),  // do NOT divide
 
 **Recovery**: If you've already inserted bad timestamps:
 ```bash
-# Drop affected tables and sync state
+# Inspect the cursor ids, then remove only this pipe's row and affected table
 docker exec <container> clickhouse-client --password <pw> \
-  --query "DROP TABLE IF EXISTS <db>.<table>; DROP TABLE IF EXISTS <db>.sync"
+  --query "ALTER TABLE <db>.sync DELETE WHERE id = '<confirmed-pipe-id>' SETTINGS mutations_sync=1; DROP TABLE IF EXISTS <db>.<table>"
 # If using factory pattern, also delete the SQLite file
 rm <project>/*.sqlite
 # Restart

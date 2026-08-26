@@ -180,11 +180,13 @@ ORDER BY (entity_id, block_number, tx_hash, event_type)
 ```
 
 ```typescript
-onRollback: (ctx, range) => {
-  const rollbackRecords = events
-    .filter(e => e.block >= range.from)
-    .map(e => ({ ...e, sign: -1 }))
-  return ctx.insert(rollbackRecords)
+onRollback: async ({ reason, store, safeCursor }) => {
+  // reason is 'recovery' after an unclean restart or 'fork' after a reorg
+  await store.removeAllRows({
+    tables: ['events'],
+    where: 'block_number > {latest:UInt64}',
+    params: { latest: safeCursor.number },
+  })
 }
 ```
 

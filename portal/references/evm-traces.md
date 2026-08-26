@@ -54,8 +54,7 @@ Contract creation via CREATE or CREATE2 opcodes.
 
 **INDEXED filter fields:**
 - `createFrom` - Deployer address (INDEXED)
-
-> **`createResultAddress` is NOT a supported filter.** Despite being listed in some docs, Portal does not support filtering by deployed contract address. You can only filter by deployer (`createFrom`). To find who deployed a known contract, you must know the deployer address first, or scan without address filters over a narrow block range.
+- `createResultAddress` - Deployed contract address (INDEXED)
 
 **Response fields:** `createResultAddress` (deployed contract address), `createResultCode` (deployed bytecode), `createValue`
 
@@ -165,9 +164,9 @@ Contract creation via CREATE or CREATE2 opcodes.
 
 ---
 
-### Example 4: Find CREATE2 Deployments
+### Example 4: Find a Deployment by Contract Address
 
-**Use case:** Track deterministic contract deployments (CREATE2).
+**Use case:** Find the deployment trace for a known contract address.
 
 ```json
 {
@@ -192,7 +191,7 @@ Contract creation via CREATE or CREATE2 opcodes.
 **Notes:**
 - Cannot directly filter by CREATE vs CREATE2 (both have type "create")
 - Use `createResultAddress` to find specific contract deployment
-- Check transaction input for CREATE2 opcode (0xf5)
+- Inspect the creating execution if distinguishing CREATE from CREATE2 matters
 
 ---
 

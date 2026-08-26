@@ -15,7 +15,7 @@ This guide helps you:
 Before building indexers, ensure you have:
 
 - [ ] Node.js v22 LTS (>= 22.15.0 — required by `@subsquid/pipes`; avoid v25.x)
-- [ ] npm >= 8.0.0 (or bun >= 1.0.0)
+- [ ] npm >= 8.0.0 and pnpm/pnpx available for the pinned Pipes CLI
 - [ ] Docker running
 - [ ] ClickHouse container (for local development)
 - [ ] Access to Subsquid Portal API
@@ -67,15 +67,16 @@ export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
 
 ### 2. Package Manager
 
-**Required**: npm >= 8.0.0 OR bun >= 1.0.0
+**Required**: npm >= 8.0.0 plus pnpm/pnpx for the CLI commands in this skill. Bun can install and run a generated project, but Bun alone does not provide `pnpx`.
 
 **Check npm**:
 ```bash
 npm --version
 npx --version  # Should come with npm
+pnpx --version
 ```
 
-**Check bun** (alternative to npm):
+**Check bun** (optional project package manager):
 ```bash
 bun --version
 ```
@@ -85,7 +86,7 @@ bun --version
 curl -fsSL https://bun.sh/install | bash
 ```
 
-**Note**: npm comes with Node.js installation
+**Note**: npm comes with Node.js. Install pnpm with Corepack or the official pnpm installer before running `pnpx @subsquid/pipes-cli@...` commands.
 
 ### 3. Docker
 
@@ -258,6 +259,7 @@ cat .env
 ```bash
 CLICKHOUSE_URL=http://localhost:8123
 CLICKHOUSE_DATABASE=pipes
+CLICKHOUSE_USER=default
 CLICKHOUSE_PASSWORD=default
 ```
 

@@ -1,17 +1,17 @@
 ---
 name: squid-perf
-description: Compare sync-time performance across one or more Squid SDK deployments. Fetches logs via sqd CLI, parses per-service progress, and generates a self-contained HTML report plus a Markdown summary with wall-clock/active-time/downtime breakdowns at log-spaced block breakpoints. Supports single-indexer mode (metrics only, no comparison). Use when the user invokes "/squid-perf", asks to compare Squid deployment sync times, or references squid performance profiling.
+description: Compare sync-time performance across one or more Squid SDK deployments. Fetches logs via sqd CLI, parses per-service progress, and generates a self-contained HTML report plus a Markdown summary with wall-clock/active-time/downtime breakdowns at percentage-based block breakpoints. Supports single-indexer mode (metrics only, no comparison). Use when the user invokes "/squid-perf", asks to compare Squid deployment sync times, or references squid performance profiling.
 metadata:
   author: subsquid
-  version: "1.1.4"
+  version: "1.1.5"
   category: core
 ---
 
-# /squid-perf
+# Squid performance comparison
 
 Compare sync-time performance across one or more Squid SDK deployments. Produces a self-contained HTML report and a Markdown summary in the current working directory.
 
-**Skill dir:** `~/.claude/skills/squid-perf/` (scripts live in `scripts/`)
+**Skill dir:** Resolve the directory containing this `SKILL.md` once and use its absolute path as `<skill-dir>`. Do not assume a Claude-specific installation path.
 **Output dir:** `./squid-perf-output/` (CWD-relative; created if missing)
 
 ---
@@ -25,7 +25,7 @@ These are settled — don't ask the user again unless they change something.
 - **Block alignment:** assume all compared indexers cover the same block ranges (user's stated assumption). Use relative-from-first-log per deployment. If detected ranges diverge noticeably across deployments for a given service, emit a loud warning in the summary but still render.
 - **Tier of metrics extracted:**
   - Tier 1 (always): `sqd:processor` / `sqd:batch-processor` progress lines → `(ts, current_block, target_block, rate, mapping_rate, items_per_sec, eta)`.
-  - Tier 2 (always if present): `sqd:multicall` latency lines, restarts (detected via `current_block` going backward), ERROR/WARN lines (capped at 1000/service).
+  - Tier 2 (always if present): `sqd:multicall` latency lines, restarts (detected via `current_block` going backward), and warning/error/critical lines (capped at 1000/service).
   - Tier 3 (auto-discovered): any logger namespace appearing ≥10 times in ALL compared deployments for the SAME service; extract numeric fields; render as a small stats table (count, mean, median, p95).
 - **Breakpoint selection:** percentage-based — 10 evenly-spaced breakpoints at 10%, 20%, ..., 100% of each service's **effective range**, where effective range = `(catchupBlock - firstBlock)`. `catchupBlock` = first progress row where `current >= target - 10` (indexer reached chain tip). Anything past this is steady-state, not sync, and is **excluded** from the metric.
   - Rationale: fraction-based clips (e.g., "99.9% of observed range") fail when the idle tail has many progress rows but few blocks — a deployment synced in 4 min and idled 10 days ends up with 99.9% of its blocks still inside the sync phase but 100% of the time inside the tail.
@@ -35,7 +35,7 @@ These are settled — don't ask the user again unless they change something.
   - Output surfaces both the percentage and the absolute block count (e.g., "10% (500K blocks)"). Override via `--breakpoints 500K,1M,5M,10M,20M` (absolute block offsets from firstBlock; catchup logic does NOT apply to overrides).
 - **Catchup gap threshold:** `CATCHUP_GAP_BLOCKS = 10` (constant in `report.mjs`). Matches the indexer's own steady-state lag behind chain head; tuneable if a chain's head noise is higher.
 - **Output:** self-contained HTML (Chart.js inlined — no CDN), plus Markdown with tables only (no charts in MD, link to HTML at the top).
-- **HTML template:** the HTML report MUST be rendered from the template at `~/.claude/skills/squid-perf/templates/report.html`. `report.mjs` reads this template and substitutes placeholders rather than building markup via string concatenation. Edit the template to change layout/styling; do not inline HTML in the script.
+- **HTML template:** the HTML report MUST be rendered from `<skill-dir>/templates/report.html`. `report.mjs` resolves this path relative to itself and substitutes placeholders rather than building markup via string concatenation. Edit the template to change layout/styling; do not inline HTML in the script.
 - **Output layout:**
   ```
   ./squid-perf-output/
@@ -58,17 +58,17 @@ These are settled — don't ask the user again unless they change something.
 
 ## Orchestration
 
-Execute the following phases **in order**. Mark progress with TaskCreate/TaskUpdate as you go.
+Execute the following phases **in order**. Track progress with the agent's task mechanism when one is available.
 
 ### Phase 0 — Preflight
 
-Run `bash ~/.claude/skills/squid-perf/scripts/preflight.sh`.
+Run `bash <skill-dir>/scripts/preflight.sh`.
 - On non-zero exit: print the script's error output verbatim, then **stop**. Do not proceed.
 - On zero exit: continue.
 
 ### Phase 1 — Collect inputs
 
-Parse the slash-command args. Accepted shapes:
+Parse the user's request or slash-command arguments. Accepted shapes:
 
 ```
 /squid-perf <ref1> [<ref2> ...]
@@ -84,7 +84,7 @@ Flags (all optional):
 
 For each positional ref the user supplied:
 1. Regex-validate the shape: `^[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+$`. On invalid shape, report which ref is malformed and stop.
-2. If `since` or `label` for that ref is missing (not in config), ask via `AskUserQuestion` in a single batched call:
+2. If `since` or `label` for that ref is missing (not in config), ask for all missing values together:
    - "Deployment date for `<ref>` (ISO 8601 with `Z`, e.g., `2026-04-16T08:30:59Z`) — used for `sqd logs --since`?"
    - "Short label for `<ref>` (e.g., 'baseline', 'optimized')? Default: derived from ref name."
 3. After collecting: resolve label collisions (append `_2`, `_3`, …).
@@ -115,13 +115,13 @@ For each indexer in the resolved config, compute:
 
 If `sentinel_path` exists and `--force-refresh` is NOT set: skip fetch, reuse cache.
 
-Otherwise, launch the fetch **in parallel** — one `Bash(run_in_background=true)` call per indexer:
+Otherwise, launch the fetches **in parallel** using the agent's available shell/background mechanism — one process per indexer:
 
 ```
-bash ~/.claude/skills/squid-perf/scripts/fetch-logs.sh <ref> <since> <cache_path>
+bash <skill-dir>/scripts/fetch-logs.sh <ref> <since> <cache_path>
 ```
 
-After launching all background Bash calls, poll them with `BashOutput` until each finishes. Don't sleep proactively — the runtime notifies on completion.
+Wait for each process to finish. Do not add proactive polling sleeps when the runtime can notify on completion.
 
 The fetch script handles:
 - Retry logic (3× with 10s backoff).
@@ -138,7 +138,7 @@ After all fetches return:
 For each successfully-fetched deployment, run (can be parallel, but sequential is fine — parse is fast):
 
 ```
-node ~/.claude/skills/squid-perf/scripts/parse.mjs \
+node <skill-dir>/scripts/parse.mjs \
   --input <cache_path> \
   --output <run-dir>/parsed/<slug>.json \
   --label <label>
@@ -151,7 +151,7 @@ If parse fails for a deployment: record, continue. If all fail: stop with error.
 ### Phase 4 — Compute metrics & render
 
 ```
-node ~/.claude/skills/squid-perf/scripts/report.mjs \
+node <skill-dir>/scripts/report.mjs \
   --run-dir <run-dir> \
   [--breakpoints <csv>] \
   [--downtime-threshold <seconds>]

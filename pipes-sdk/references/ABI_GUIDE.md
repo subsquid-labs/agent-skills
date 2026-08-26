@@ -14,40 +14,29 @@ events: {
   transfers: commonAbis.erc20.events.Transfer,    // Transfer(from, to, value)
   approvals: commonAbis.erc20.events.Approval,    // Approval(owner, spender, value)
 }
-
-// ERC721
-events: {
-  transfers: commonAbis.erc721.events.Transfer,
-}
 ```
 
-Available in `commonAbis`: `erc20`, `erc721`, `erc1155`
+`commonAbis` currently exports `erc20` only. For ERC-721, ERC-1155, and custom contracts, use `defineAbi()` with a JSON ABI or generate a facade with typegen.
 
-## Fetching ABIs from Block Explorers
+## Loading and Generating ABIs
 
-For custom/unknown contracts, use the block explorer APIs:
-
-```typescript
-// Ethereum mainnet
-WebFetch({
-  url: `https://api.etherscan.io/api?module=contract&action=getabi&address=${address}`,
-  prompt: "Extract the ABI JSON from the result field"
-})
-
-// Base mainnet
-WebFetch({
-  url: `https://api.basescan.org/api?module=contract&action=getabi&address=${address}`,
-  prompt: "Extract the ABI JSON from the result field"
-})
-```
-
-Save to `./abi/<contract_name>.json` then generate TypeScript types:
+For custom or token-specific contracts, let the current typegen CLI read a local ABI, fetch a verified contract by address, or read an ABI URL. Its arguments are positional: `<output-dir> [abi...]`.
 
 ```bash
-npx @subsquid/evm-typegen@latest \
-  --abi ./abi/<contract_name>.json \
-  --output ./abi/<contract_name>.ts
+# Local JSON ABI
+npx @subsquid/evm-typegen@latest src/abi ./abi/<contract_name>.json
+
+# Verified contract address (select the chain explicitly)
+npx @subsquid/evm-typegen@latest src/abi \
+  0xYourContractAddress#contract_name \
+  --chain-id 1
+
+# Arbitrary ABI URL
+npx @subsquid/evm-typegen@latest src/abi \
+  https://example.com/contract.json#contract_name
 ```
+
+Run `npx @subsquid/evm-typegen@latest --help` before changing this command shape. Etherscan's legacy V1 `module=contract&action=getabi` endpoints are retired; do not build a workflow around them.
 
 Import and use the generated types:
 

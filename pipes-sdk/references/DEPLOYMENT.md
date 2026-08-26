@@ -143,12 +143,15 @@ docker exec $CONTAINER_NAME clickhouse-client \
   --query "CREATE DATABASE IF NOT EXISTS $DATABASE_NAME"
 ```
 
-**Step 4: Clear sync table** (only if reusing a database from a previous indexer)
+**Step 4: Reset the confirmed pipe cursor** (only if deliberately reusing its data target)
 
 ```bash
 docker exec $CONTAINER_NAME clickhouse-client \
   --password "$CLICKHOUSE_PASSWORD" \
-  --query "DROP TABLE IF EXISTS $DATABASE_NAME.sync"
+  --query "SELECT id, current, finalized FROM $DATABASE_NAME.sync"
+docker exec $CONTAINER_NAME clickhouse-client \
+  --password "$CLICKHOUSE_PASSWORD" \
+  --query "ALTER TABLE $DATABASE_NAME.sync DELETE WHERE id = '<confirmed-pipe-id>' SETTINGS mutations_sync=1"
 ```
 
 **Step 5: Configure `.env`**
@@ -287,12 +290,15 @@ CLICKHOUSE_USER=default
 CLICKHOUSE_PASSWORD=<actual-cloud-password>
 ```
 
-**Step 4: Clear sync table** (only if reusing a database from a previous indexer)
+**Step 4: Reset the confirmed pipe cursor** (only if deliberately reusing its data target)
 
 ```bash
 curl -X POST "https://[service-id].[region].aws.clickhouse.cloud:8443/" \
   --user "default:[password]" \
-  -d "DROP TABLE IF EXISTS [database-name].sync"
+  -d "SELECT id, current, finalized FROM [database-name].sync"
+curl -X POST "https://[service-id].[region].aws.clickhouse.cloud:8443/" \
+  --user "default:[password]" \
+  -d "ALTER TABLE [database-name].sync DELETE WHERE id = '<confirmed-pipe-id>' SETTINGS mutations_sync=1"
 ```
 
 **Step 5: Start indexer**
@@ -367,6 +373,8 @@ npm i -g @railway/cli
 railway login && railway init
 railway variables set \
   CLICKHOUSE_URL="$CLICKHOUSE_URL" \
+  CLICKHOUSE_DATABASE="$CLICKHOUSE_DATABASE" \
+  CLICKHOUSE_USER="$CLICKHOUSE_USER" \
   CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
 railway up
 ```
@@ -420,11 +428,11 @@ docker stop clickhouse && docker rm clickhouse
 
 ### Wrong Start Block ("Resuming from X")
 
-**Cause**: Leftover `sync` table in the database from a previous indexer run.
+**Cause**: The pipe resumed from a cursor row keyed by its source `id` or explicit target `settings.id`.
 
 **Fix**:
 1. Stop indexer
-2. Drop sync table (Step 4 in either workflow)
+2. Inspect cursor ids and reset only the confirmed row (Step 4 in either workflow)
 3. Restart indexer
 4. Verify first log line shows correct start block
 5. After restart, watch the first 10 seconds of logs:
@@ -479,7 +487,7 @@ diff /tmp/schema_tables.txt /tmp/code_tables.txt
 
 ## Best Practices
 
-- **CRITICAL: Use dedicated databases per indexer** (`uniswap_base`, `morpho_ethereum`). All indexers write to `{database}.sync` with `id = 'stream'` — sharing a database means the second indexer resumes from the first's position
+- **Prefer dedicated databases per indexer** (`uniswap_base`, `morpho_ethereum`). Current cursor rows are keyed by the source pipe `id` (or explicit target `settings.id`), but data-table names can still collide. Never drop a shared `sync` table to reset one pipe.
 - **Local**: Use named containers (`clickhouse-dev`, `clickhouse-test`) and add `-v clickhouse-data:/var/lib/clickhouse` for data persistence
 - **Cloud**: Store passwords in a password manager; use environment variables, not hardcoded values
 - **Cloud cost**: Start with recent blocks for testing; monitor storage in the Cloud console

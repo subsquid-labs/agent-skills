@@ -197,34 +197,34 @@ const sighash = ethers.id("swap(uint256,address[])").slice(0, 10);
 
 ---
 
-### Example 5: Monitor Contract Deployments by Address
+### Example 5: Find Contract Deployments by Deployer
 
-**Use case:** Find all contracts deployed by a specific deployer address.
+**Use case:** Find all contracts deployed by a specific deployer address. Contract creation is indexed on EVM traces; an empty transaction `to` filter does not select null recipients.
 
 ```json
 {
   "type": "evm",
   "fromBlock": 19000000,
   "toBlock": 19100000,
-  "transactions": [{
-    "from": ["0x1234567890123456789012345678901234567890"],
-    "to": []
+  "traces": [{
+    "type": ["create"],
+    "createFrom": ["0x1234567890123456789012345678901234567890"]
   }],
   "fields": {
-    "transaction": {
-      "hash": true,
-      "from": true,
-      "contractAddress": true,
-      "input": true
+    "trace": {
+      "type": true,
+      "createFrom": true,
+      "createResultAddress": true,
+      "createResultCode": true,
+      "transactionIndex": true
     }
   }
 }
 ```
 
 **Notes:**
-- `to: []` filters for contract creation transactions
-- `contractAddress` field contains the deployed contract address
-- `input` contains the contract bytecode
+- `createResultAddress` is the deployed contract address
+- For a known contract address, filter traces by `createResultAddress` or call `portal_evm_get_contract_deployment`
 
 ---
 
@@ -403,7 +403,7 @@ Add `logs`, `traces`, or `stateDiffs` boolean fields **inside each transaction f
 
 **Important:** Must also request the corresponding fields in the `fields` section.
 
-**Contract creation:** Use `"to": []` (empty array) to filter for deployment transactions. The `contractAddress` field contains the new contract address.
+**Contract creation:** Transaction filters do not have a null-recipient selector. Query `type: ["create"]` traces with `createFrom` or `createResultAddress`, or call `portal_evm_get_contract_deployment` for a known contract.
 
 ---
 

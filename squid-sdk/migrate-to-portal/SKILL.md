@@ -3,7 +3,7 @@ name: migrate-to-portal
 description: Migrate an existing Squid SDK indexer (EVM or Solana) off the v2 gateway and onto the Portal data source. Covers the package swap (`@subsquid/evm-processor` → `@subsquid/evm-stream` + `@subsquid/evm-objects` + `@subsquid/batch-processor` for EVM; `@subsquid/solana-stream@^0.x` → `^1.x` for Solana), the API/type shape changes, and field-selection changes. Use when the user mentions migrating, porting, upgrading, or converting a v2 squid to Portal; references `v2.archive.subsquid.io`, `setGateway`, `setDataSource`, `lookupArchive`, or `SolanaRpcClient`; or hits TS errors on `EvmBatchProcessor`, `evmLog`, or `block.header.slot` after a `@subsquid/*` bump.
 metadata:
   author: subsquid
-  version: "1.2.0"
+  version: "1.2.1"
   category: documentation
 ---
 

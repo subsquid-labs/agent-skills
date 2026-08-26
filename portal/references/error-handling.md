@@ -16,18 +16,20 @@ Every error the Portal returns — on any endpoint, from any data source — use
 
 Two fields carry the meaning:
 
-- **`type`** — the coarse category. Four values, closed set. **Branch on this.**
+- **`type`** — the coarse category. The public Portal normally exposes four operational values; protected deployments add two credential values. **Branch on this.**
 - **`code`** — the specific cause, open set (codes are added over time). Match on this when you handle one case; treat an unknown `code` as its `type`.
 
 `message` is prose for humans — not stable, not part of the contract; never parse or match on it. `param` appears when the error is about one request parameter. `request_id` appears on 5xx bodies; the same id is on **every** response as the `x-request-id` header — quote it when reporting a problem.
 
 > **204 No Content is not an error.** It is the correct answer when the requested range has no blocks yet; it carries no body.
 
-## The Four Types
+## Error Types
 
 | `type` | Whose fault | Retry the same request? |
 |---|---|---|
 | `invalid_request_error` | Yours | **No.** The same request reproduces it exactly — fix the request. |
+| `authentication_error` | Yours — the credential | **No.** Present a valid credential. |
+| `permission_error` | Yours — the credential's scope | **No.** Use a credential that covers the portal and dataset. |
 | `rate_limit_error` | Capacity | **Yes**, after the interval in `Retry-After`. |
 | `availability_error` | Portal/upstream, transient | **Yes.** Honor `Retry-After` when present; otherwise back off. |
 | `api_error` | A Portal bug | **No.** Retrying cannot succeed — report it with `request_id`. |
@@ -43,6 +45,12 @@ The split between the last two matters: `availability_error` means a later attem
 | `unknown_dataset` | `invalid_request_error` | 404 | No such dataset on this portal |
 | `not_found` | `invalid_request_error` | 404 | No such route or resource (also: timestamp resolution beyond the head — message `"block not in hotblocks"`) |
 | `base_block_mismatch` | `invalid_request_error` | 409 | `parentBlockHash` doesn't match the canonical parent of the first requested block — a reorg; see below |
+| `missing_credential` | `authentication_error` | 403 | No API key was presented |
+| `invalid_credential` | `authentication_error` | 403 | Key is unreadable, unknown, or has the wrong secret |
+| `revoked_credential` | `authentication_error` | 403 | Key was revoked |
+| `expired_credential` | `authentication_error` | 403 | Key is past its expiry |
+| `portal_not_allowed` | `permission_error` | 403 | Key is not valid on this Portal deployment |
+| `dataset_not_allowed` | `permission_error` | 403 | Key does not cover the requested dataset |
 | `overloaded` | `rate_limit_error` | 529 (proxied 429/529) | At capacity; **always** carries `Retry-After` (seconds, ≥ 1, never an HTTP date) |
 | `no_workers` | `availability_error` | 503 | No worker currently holds the requested data |
 | `retries_exhausted` | `availability_error` | 503 | Workers reachable; every attempt failed transiently |
@@ -84,6 +92,7 @@ A client that omits `parentBlockHash` on resume gets no conflict signal and sile
 
 - `Retry-After` is mandatory on every `overloaded` response, always ≥ 1 second, always seconds (never an HTTP date). Honor it.
 - `upstream_unavailable` may carry a `Retry-After` from the data source; honor it when present, otherwise use your own backoff.
+- `authentication_error` and `permission_error` never carry `Retry-After`; waiting cannot make the same credential valid or broaden its scope.
 - The Portal does not prescribe a give-up policy — hand-rolled clients should cap total attempts or elapsed time themselves and surface the last `error.type`/`code`/`request_id` when giving up.
 - CORS exposes `retry-after` and `x-request-id` (plus the `x-sqd-*` stream metadata headers), so browser clients can read them.
 

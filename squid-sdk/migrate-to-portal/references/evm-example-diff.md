@@ -39,7 +39,12 @@ Canonical example matching the upstream migration doc. Use as a reference; adapt
      range: { from: 6_082_465 },
    })
    .setFields({
-     log: { transactionHash: true },
+     log: {
+       address: true,
+       topics: true,
+       data: true,
+       transactionHash: true,
+     },
    })
 +  .build()
 
@@ -95,7 +100,12 @@ Canonical example matching the upstream migration doc. Use as a reference; adapt
 +import type {Logger} from '@subsquid/logger'
 
  const fields = {
-   log: { transactionHash: true },
+   log: {
+     address: true,
+     topics: true,
+     data: true,
+     transactionHash: true,
+   },
  } satisfies FieldSelection
 
  export type Fields = typeof fields
