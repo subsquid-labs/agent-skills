@@ -215,7 +215,9 @@ JSON
 cat > "$TEST_TMP_DIR/edge-a.log" <<'LOG'
 api 2026-01-01T00:00:00.000Z INFO sqd:processor 100 / 1000, rate: 10 blocks/sec, mapping: 10 blocks/sec, 10 items/sec, eta: 90s
 api 2026-01-01T00:00:10.000Z INFO sqd:processor 500 / 1000, rate: 10 blocks/sec, mapping: 10 blocks/sec, 10 items/sec, eta: 50s
+api 2026-01-01T00:00:10.000Z INFO sqd:multicall processed sync 500 at block 500: 1 chunks, 1 groups, 1 total calls, 10ms
 api 2026-01-01T00:00:20.000Z INFO sqd:processor 995 / 1000, rate: 10 blocks/sec, mapping: 10 blocks/sec, 10 items/sec, eta: 0s
+api 2026-01-01T00:00:20.000Z INFO sqd:multicall processed idle 995 at block 995: 1 chunks, 1 groups, 1 total calls, 9999ms
 api 2026-01-01T00:00:20.000Z INFO sqd:processor 995 / 1000, rate: 1000 blocks/sec, mapping: 1000 blocks/sec, 1000 items/sec, eta: 0s
 api 2026-01-01T00:00:20.000Z INFO sqd:processor 1000 / 1000, rate: 1000 blocks/sec, mapping: 1000 blocks/sec, 1000 items/sec, eta: 0s
 api 2026-01-01T00:05:00.000Z INFO sqd:processor 1000 / 1000, rate: 1000 blocks/sec, mapping: 1000 blocks/sec, 1000 items/sec, eta: 0s
@@ -224,7 +226,9 @@ LOG
 cat > "$TEST_TMP_DIR/edge-b.log" <<'LOG'
 api 2026-01-01T00:00:00.000Z INFO sqd:processor 100 / 1000, rate: 10 blocks/sec, mapping: 10 blocks/sec, 10 items/sec, eta: 90s
 api 2026-01-01T00:00:10.000Z INFO sqd:processor 500 / 1000, rate: 10 blocks/sec, mapping: 10 blocks/sec, 10 items/sec, eta: 50s
+api 2026-01-01T00:00:10.000Z INFO sqd:multicall processed sync 500 at block 500: 1 chunks, 1 groups, 1 total calls, 10ms
 api 2026-01-01T00:00:20.000Z INFO sqd:processor 995 / 1000, rate: 10 blocks/sec, mapping: 10 blocks/sec, 10 items/sec, eta: 0s
+api 2026-01-01T00:00:20.000Z INFO sqd:multicall processed idle 995 at block 995: 1 chunks, 1 groups, 1 total calls, 9999ms
 api 2026-01-01T00:00:20.000Z INFO sqd:processor 995 / 1000, rate: 1 blocks/sec, mapping: 1 blocks/sec, 1 items/sec, eta: 0s
 api 2026-01-01T00:00:20.000Z INFO sqd:processor 1000 / 1000, rate: 1 blocks/sec, mapping: 1 blocks/sec, 1 items/sec, eta: 0s
 api 2026-01-01T00:05:00.000Z INFO sqd:processor 1000 / 1000, rate: 1 blocks/sec, mapping: 1 blocks/sec, 1 items/sec, eta: 0s
@@ -239,6 +243,10 @@ if grep -q 'Likely the dominant bottleneck' "$EDGE_REPORT_DIR/report.md"; then
 fi
 if grep -Fq '257.5 blk/s' "$EDGE_REPORT_DIR/report.md" || grep -Fq '7.8 blk/s' "$EDGE_REPORT_DIR/report.md"; then
   fail "interval rate table included post-catchup idle-tail samples"
+fi
+grep -Fq 'p95 10ms' "$EDGE_REPORT_DIR/report.md" || fail "sync multicall sample is missing"
+if grep -Fq '9999ms' "$EDGE_REPORT_DIR/report.md"; then
+  fail "interval multicall statistics included a same-timestamp idle-tail sample"
 fi
 node -e '
   const lines = require("fs").readFileSync(process.argv[1], "utf8").split("\n");

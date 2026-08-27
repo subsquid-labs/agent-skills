@@ -15,9 +15,9 @@
 //       name, loggerFamily,
 //       firstBlock, lastBlock, firstTsMs, lastTsMs,
 //       firstProgressTsMs, lastProgressTsMs, progressCount,
-//       progressSchema: ["tsMs","current","target","rate","mappingRate","itemsPerSec","etaSec"],
-//       progressRows: [[tsMs, current, target, rate, mappingRate, itemsPerSec, etaSec], ...],
-//       multicall: [{ tsMs, operation, block, chunks, groups, calls, latencyMs }, ...],
+//       progressSchema: ["tsMs","current","target","rate","mappingRate","itemsPerSec","etaSec","sequence"],
+//       progressRows: [[tsMs, current, target, rate, mappingRate, itemsPerSec, etaSec, sequence], ...],
+//       multicall: [{ tsMs, sequence, operation, block, chunks, groups, calls, latencyMs }, ...],
 //       restarts: [{ rowIndex, tsMs, fromBlock, resumedAtBlock }, ...],
 //       errorCount, levelCounts: { warning, error },
 //       errors: [{ tsMs, level, logger, message }, ...]  // capped at 1000
@@ -30,7 +30,7 @@ import fs from "node:fs";
 import readline from "node:readline";
 import path from "node:path";
 
-const PARSER_VERSION = 6;
+const PARSER_VERSION = 7;
 
 // Line shape:  <service> <ISO-TS>Z <LEVEL> <logger> <message...>
 const LINE_RX =
@@ -207,6 +207,7 @@ async function main() {
       if (mm) {
         svc.multicall.push({
           tsMs,
+          sourceOrdinal: totalLines,
           operation: mm[1],
           block: parseInt(mm[3], 10),
           chunks: parseInt(mm[4], 10),
@@ -279,8 +280,15 @@ async function main() {
     svc.progressRows.sort((a, b) =>
       a[0] - b[0] || (direction < 0 ? b[7] - a[7] : a[7] - b[7])
     );
-    svc.progressRows = svc.progressRows.map(row => row.slice(0, 7));
-    svc.multicall.sort((a, b) => a.tsMs - b.tsMs);
+    svc.progressRows = svc.progressRows.map(row => [
+      ...row.slice(0, 7),
+      direction < 0 ? -row[7] : row[7],
+    ]);
+    for (const sample of svc.multicall) {
+      sample.sequence = direction < 0 ? -sample.sourceOrdinal : sample.sourceOrdinal;
+      delete sample.sourceOrdinal;
+    }
+    svc.multicall.sort((a, b) => a.tsMs - b.tsMs || a.sequence - b.sequence);
     svc.errors.sort((a, b) => a.tsMs - b.tsMs);
     for (const t3 of svc.tier3.values()) {
       t3.samples.sort((a, b) => a.tsMs - b.tsMs);
@@ -312,7 +320,7 @@ async function main() {
       firstProgressTsMs: progressCount ? svc.progressRows[0][0] : null,
       lastProgressTsMs:  progressCount ? svc.progressRows[progressCount - 1][0] : null,
       progressCount,
-      progressSchema: ["tsMs", "current", "target", "rate", "mappingRate", "itemsPerSec", "etaSec"],
+      progressSchema: ["tsMs", "current", "target", "rate", "mappingRate", "itemsPerSec", "etaSec", "sequence"],
       progressRows: svc.progressRows,
       multicall: svc.multicall,
       restarts: svc.restarts,

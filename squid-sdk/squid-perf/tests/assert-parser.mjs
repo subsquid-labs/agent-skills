@@ -43,3 +43,8 @@ if (reverseSameTimestampRestart.restarts.length !== 1 || reverseSameTimestampRes
 if (reverseSameTimestampRestart.progressRows.map(row => row[1]).join(",") !== "5000,8000,4000,4500") {
   throw new Error(`unexpected reverse same-timestamp order: ${JSON.stringify(reverseSameTimestampRestart.progressRows)}`);
 }
+const reverseRows = reverseSameTimestampRestart.progressRows;
+const reverseMulticall = reverseSameTimestampRestart.multicall[0];
+if (!(reverseRows[1][7] < reverseMulticall.sequence && reverseMulticall.sequence < reverseRows[2][7])) {
+  throw new Error(`reverse same-timestamp sequence was not normalized: ${JSON.stringify(reverseSameTimestampRestart)}`);
+}

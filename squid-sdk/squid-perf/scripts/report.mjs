@@ -147,7 +147,7 @@ function findCatchupPoint(progressRows) {
     const target = row[2];
     if (target == null || target <= 0) continue;
     if (target - current <= CATCHUP_GAP_BLOCKS) {
-      return { tsMs: row[0], block: current, target, rowIndex: i };
+      return { tsMs: row[0], block: current, target, rowIndex: i, sequence: row[7] ?? null };
     }
   }
   return null;
@@ -214,11 +214,12 @@ function progressRowsThroughCatchup(deployment) {
   return deployment.progressRows.slice(0, deployment.catchup.rowIndex + 1);
 }
 
-function multicallStatsInRange(multicall, fromBlock, toBlock, maxTsMs = null) {
+function multicallStatsInRange(multicall, fromBlock, toBlock, maxTsMs = null, maxSequence = null) {
   const latencies = [], callCounts = [];
   for (const mc of multicall) {
     if (mc.block < fromBlock || mc.block > toBlock) continue;
     if (maxTsMs != null && mc.tsMs > maxTsMs) continue;
+    if (maxTsMs != null && mc.tsMs === maxTsMs && maxSequence != null && mc.sequence > maxSequence) continue;
     latencies.push(mc.latencyMs);
     callCounts.push(mc.calls);
   }
@@ -478,7 +479,7 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
         firstBlock, lastBlock, effectiveLastBlock,
         range: effectiveRange,
         rawRange,
-        catchup,                 // { tsMs, block, target, rowIndex } or null
+        catchup,                 // { tsMs, block, target, rowIndex, sequence } or null
         catchupWallMs,           // ms from first progress to catchup, or null
         stillSyncing,
         wasAlreadyCaughtUp,
@@ -582,6 +583,7 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
             dep.firstBlock + prevBlock,
             dep.firstBlock + bp,
             syncEndTsMs,
+            !breakpointsOverride ? dep.catchup?.sequence ?? null : null,
           ),
         });
         prevBlock = bp;
