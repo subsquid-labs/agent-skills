@@ -611,7 +611,10 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
     const chartSeries = {};
     for (const [label, dep] of Object.entries(perDeployment)) {
       if (!dep || dep.nonSync) continue;
-      chartSeries[label] = sampleElapsedSeries(dep.progressRows, dep.firstTsMs, dep.firstBlock);
+      const chartRows = dep.catchup != null && !dep.wasAlreadyCaughtUp
+        ? dep.progressRows.filter(row => row[0] <= dep.catchup.tsMs)
+        : dep.progressRows;
+      chartSeries[label] = sampleElapsedSeries(chartRows, dep.firstTsMs, dep.firstBlock);
     }
 
     // Per-service catchup summary across deployments, for warnings & findings.

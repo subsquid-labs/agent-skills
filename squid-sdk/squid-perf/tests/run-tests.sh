@@ -111,11 +111,16 @@ node "$SKILL_DIR/scripts/parse.mjs" \
   --input "$TESTS_DIR/fixtures/same-timestamp-restart.log" \
   --output "$TEST_TMP_DIR/same-timestamp-restart.json" \
   --label same-timestamp-restart
+node "$SKILL_DIR/scripts/parse.mjs" \
+  --input "$TESTS_DIR/fixtures/reverse-same-timestamp-restart.log" \
+  --output "$TEST_TMP_DIR/reverse-same-timestamp-restart.json" \
+  --label reverse-same-timestamp-restart
 node "$TESTS_DIR/assert-parser.mjs" \
   "$TEST_TMP_DIR/current-levels.json" \
   "$TEST_TMP_DIR/restart.json" \
   "$TEST_TMP_DIR/small-restart.json" \
-  "$TEST_TMP_DIR/same-timestamp-restart.json"
+  "$TEST_TMP_DIR/same-timestamp-restart.json" \
+  "$TEST_TMP_DIR/reverse-same-timestamp-restart.json"
 
 printf 'test: report keeps a nonnegative final-segment range after restart\n' >&2
 RESTART_REPORT_DIR="$TEST_TMP_DIR/restart-report-run"
@@ -231,6 +236,20 @@ fi
 if grep -Fq '505.0 blk/s' "$EDGE_REPORT_DIR/report.md" || grep -Fq '5.5 blk/s' "$EDGE_REPORT_DIR/report.md"; then
   fail "interval rate table included post-catchup idle-tail samples"
 fi
+node -e '
+  const lines = require("fs").readFileSync(process.argv[1], "utf8").split("\n");
+  const templateLine = lines.findIndex(line => line.includes("type=\"__bundler/template\"") && line.trim().startsWith("<script"));
+  const inner = JSON.parse(lines[templateLine + 1]);
+  const openTag = "<script id=\"__REPORT_DATA__\" type=\"application/json\">";
+  const openAt = inner.indexOf(openTag, inner.indexOf("-->") + 3);
+  const closeAt = inner.indexOf("</script>", openAt + openTag.length);
+  const data = JSON.parse(inner.slice(openAt + openTag.length, closeAt));
+  const service = data.services.find(item => item.name === "api");
+  for (const label of ["edge-a", "edge-b"]) {
+    const progress = service?.progress?.[label];
+    if (!progress || progress.at(-1)?.block !== 995 || progress.at(-1)?.t !== 20) process.exit(1);
+  }
+' "$EDGE_REPORT_DIR/report.html" || fail "progress chart included post-catchup idle-tail samples"
 node "$SKILL_DIR/scripts/report.mjs" --run-dir "$EDGE_REPORT_DIR" --breakpoints 900
 node -e '
   const lines = require("fs").readFileSync(process.argv[1], "utf8").split("\n");

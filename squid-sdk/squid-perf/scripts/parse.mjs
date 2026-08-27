@@ -30,7 +30,7 @@ import fs from "node:fs";
 import readline from "node:readline";
 import path from "node:path";
 
-const PARSER_VERSION = 5;
+const PARSER_VERSION = 6;
 
 // Line shape:  <service> <ISO-TS>Z <LEVEL> <logger> <message...>
 const LINE_RX =
@@ -114,6 +114,8 @@ async function main() {
   const services = new Map();
   let totalLines = 0, parsedLines = 0, skipped = 0;
   let earliestTs = null, latestTs = null;
+  let previousInputTsMs = null;
+  let inputTimestampDirection = 0;
 
   const stream = fs.createReadStream(input, { encoding: "utf8" });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
@@ -139,6 +141,10 @@ async function main() {
     if (Number.isNaN(tsMs)) { skipped++; continue; }
 
     parsedLines++;
+    if (inputTimestampDirection === 0 && previousInputTsMs != null && tsMs !== previousInputTsMs) {
+      inputTimestampDirection = Math.sign(tsMs - previousInputTsMs);
+    }
+    previousInputTsMs = tsMs;
     if (earliestTs === null || tsMs < earliestTs) earliestTs = tsMs;
     if (latestTs === null || tsMs > latestTs) latestTs = tsMs;
 
@@ -191,7 +197,10 @@ async function main() {
 
         // Restart detection happens AFTER sorting by tsMs (see below), since
         // `sqd logs` may emit lines in reverse chronological order.
-        svc.progressRows.push([tsMs, current, target, rate, mappingRate, itemsPerSec, etaSec]);
+        // Keep the input ordinal internally. `sqd logs` is normally newest-first,
+        // including rows that share a timestamp, so a timestamp-only stable sort
+        // can preserve those equal-timestamp rows in the wrong order.
+        svc.progressRows.push([tsMs, current, target, rate, mappingRate, itemsPerSec, etaSec, totalLines]);
       }
     } else if (logger === "sqd:multicall") {
       const mm = message.match(MULTICALL_RX);
@@ -258,7 +267,19 @@ async function main() {
   for (const [name, svc] of services) {
     // `sqd logs` can emit entries in reverse chronological order, so sort all
     // time-series arrays ascending by tsMs before emitting.
-    svc.progressRows.sort((a, b) => a[0] - b[0]);
+    let serviceInputDirection = 0;
+    for (let i = 1; i < svc.progressRows.length; i++) {
+      const tsDelta = svc.progressRows[i][0] - svc.progressRows[i - 1][0];
+      if (tsDelta !== 0) {
+        serviceInputDirection = Math.sign(tsDelta);
+        break;
+      }
+    }
+    const direction = serviceInputDirection || inputTimestampDirection || -1;
+    svc.progressRows.sort((a, b) =>
+      a[0] - b[0] || (direction < 0 ? b[7] - a[7] : a[7] - b[7])
+    );
+    svc.progressRows = svc.progressRows.map(row => row.slice(0, 7));
     svc.multicall.sort((a, b) => a.tsMs - b.tsMs);
     svc.errors.sort((a, b) => a.tsMs - b.tsMs);
     for (const t3 of svc.tier3.values()) {
