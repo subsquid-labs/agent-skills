@@ -223,7 +223,9 @@ function multicallsThroughCatchup(deployment) {
     sample.tsMs < tsMs
     || (
       sample.tsMs === tsMs
-      && (sequence == null || sample.sequence == null || sample.sequence <= sequence)
+      && sequence != null
+      && sample.sequence != null
+      && sample.sequence <= sequence
     )
   );
 }
@@ -457,11 +459,9 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
             sample.tsMs > latestRestart.tsMs
             || (
               sample.tsMs === latestRestart.tsMs
-              && (
-                latestRestart.sequence == null
-                || sample.sequence == null
-                || sample.sequence >= latestRestart.sequence
-              )
+              && latestRestart.sequence != null
+              && sample.sequence != null
+              && sample.sequence >= latestRestart.sequence
             )
           )
         : s.multicall;

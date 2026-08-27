@@ -281,6 +281,38 @@ node -e '
     if (service.tier2?.[label]?.multicallP95Ms !== 10) process.exit(1);
   }
 ' "$EDGE_REPORT_DIR/report.html" || fail "HTML summary included post-catchup idle-tail samples"
+node -e '
+  const fs = require("fs");
+  for (const file of process.argv.slice(1)) {
+    const parsed = JSON.parse(fs.readFileSync(file));
+    parsed.meta.parserVersion = 6;
+    for (const service of Object.values(parsed.services)) {
+      service.progressSchema = service.progressSchema.slice(0, 7);
+      service.progressRows = service.progressRows.map(row => row.slice(0, 7));
+      for (const sample of service.multicall) delete sample.sequence;
+      for (const restart of service.restarts) delete restart.sequence;
+    }
+    fs.writeFileSync(file, JSON.stringify(parsed));
+  }
+' "$EDGE_REPORT_DIR/parsed/edge-a.json" "$EDGE_REPORT_DIR/parsed/edge-b.json"
+node "$SKILL_DIR/scripts/report.mjs" --run-dir "$EDGE_REPORT_DIR"
+node -e '
+  const lines = require("fs").readFileSync(process.argv[1], "utf8").split("\n");
+  const templateLine = lines.findIndex(line => line.includes("type=\"__bundler/template\"") && line.trim().startsWith("<script"));
+  const inner = JSON.parse(lines[templateLine + 1]);
+  const openTag = "<script id=\"__REPORT_DATA__\" type=\"application/json\">";
+  const openAt = inner.indexOf(openTag, inner.indexOf("-->") + 3);
+  const closeAt = inner.indexOf("</script>", openAt + openTag.length);
+  const data = JSON.parse(inner.slice(openAt + openTag.length, closeAt));
+  const service = data.services.find(item => item.name === "api");
+  for (const label of ["edge-a", "edge-b"]) {
+    if (service.tier2?.[label]?.multicallMeanMs !== 10) process.exit(1);
+    if (service.tier2?.[label]?.multicallP95Ms !== 10) process.exit(1);
+  }
+' "$EDGE_REPORT_DIR/report.html" || fail "legacy parsed report included an ambiguous catchup-boundary multicall"
+if grep -Fq '9999ms' "$EDGE_REPORT_DIR/report.md"; then
+  fail "legacy parsed interval included an ambiguous catchup-boundary multicall"
+fi
 node "$SKILL_DIR/scripts/report.mjs" --run-dir "$EDGE_REPORT_DIR" --breakpoints 900
 node -e '
   const lines = require("fs").readFileSync(process.argv[1], "utf8").split("\n");
