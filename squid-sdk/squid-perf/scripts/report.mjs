@@ -190,11 +190,12 @@ function computeDowntimeMs(progressRows, startTsMs, endTsMs, downtimeThresholdMs
   return downtime;
 }
 
-function computeIntervalStats(progressRows, fromBlock, toBlock) {
+function computeIntervalStats(progressRows, fromBlock, toBlock, maxTsMs = null) {
   const rateArr = [], mapArr = [], itemsArr = [];
   for (const row of progressRows) {
     const cur = row[1];
     if (cur < fromBlock || cur > toBlock) continue;
+    if (maxTsMs != null && row[0] > maxTsMs) continue;
     if (row[3] != null) rateArr.push(row[3]);
     if (row[4] != null) mapArr.push(row[4]);
     if (row[5] != null) itemsArr.push(row[5]);
@@ -688,6 +689,9 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
           deployment.progressRows,
           deployment.firstBlock,
           deployment.effectiveLastBlock,
+          deployment.catchup != null && !deployment.wasAlreadyCaughtUp
+            ? deployment.catchup.tsMs
+            : null,
         );
         return { label: l, ...stats };
       });
