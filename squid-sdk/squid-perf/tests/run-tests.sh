@@ -131,15 +131,18 @@ cat > "$RESTART_REPORT_DIR/compare-syncs.json" <<'JSON'
   "downtimeThresholdSec": 120,
   "breakpointsOverride": null,
   "indexers": [
-    { "ref": "org/restart@abc", "since": "2026-01-01T00:00:00Z", "label": "same-timestamp-restart" }
+    { "ref": "org/restart@abc", "since": "2026-01-01T00:00:00Z", "label": "reverse-same-timestamp-restart" }
   ]
 }
 JSON
-cp "$TEST_TMP_DIR/same-timestamp-restart.json" "$RESTART_REPORT_DIR/parsed/same-timestamp-restart.json"
+cp "$TEST_TMP_DIR/reverse-same-timestamp-restart.json" "$RESTART_REPORT_DIR/parsed/reverse-same-timestamp-restart.json"
 printf '[]\n' > "$RESTART_REPORT_DIR/failures.json"
 node "$SKILL_DIR/scripts/report.mjs" --run-dir "$RESTART_REPORT_DIR"
 grep -Fq '100% (500 blocks)' "$RESTART_REPORT_DIR/report.md" || fail "restart report omitted the final 500-block segment"
 grep -Fq 'Sync timings use the final uninterrupted segment.' "$RESTART_REPORT_DIR/report.md" || fail "restart report omitted the segment warning"
+if grep -Fq 'p95 10ms' "$RESTART_REPORT_DIR/report.md"; then
+  fail "restart report included a same-timestamp pre-restart multicall"
+fi
 
 printf 'test: parser counts errors beyond the retained sample cap\n' >&2
 ERROR_LOG="$TEST_TMP_DIR/error-cap.log"

@@ -303,6 +303,7 @@ async function main() {
         svc.restarts.push({
           rowIndex: i,
           tsMs: curr[0],
+          sequence: curr[7],
           fromBlock: prev[1],
           resumedAtBlock: curr[1],
         });

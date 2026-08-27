@@ -441,7 +441,17 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
       const firstProgressTsMs = progressRows[0][0];
       const lastProgressTsMs = progressRows[progressRows.length - 1][0];
       const multicall = latestRestart
-        ? (s.multicall || []).filter(sample => sample.tsMs >= latestRestart.tsMs)
+        ? (s.multicall || []).filter(sample =>
+            sample.tsMs > latestRestart.tsMs
+            || (
+              sample.tsMs === latestRestart.tsMs
+              && (
+                latestRestart.sequence == null
+                || sample.sequence == null
+                || sample.sequence >= latestRestart.sequence
+              )
+            )
+          )
         : s.multicall;
 
       // Catchup detection: first progress row within CATCHUP_GAP_BLOCKS of target.
