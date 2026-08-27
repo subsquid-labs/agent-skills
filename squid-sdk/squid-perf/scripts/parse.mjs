@@ -276,7 +276,9 @@ async function main() {
         break;
       }
     }
-    const direction = serviceInputDirection || inputTimestampDirection || -1;
+    // With no unequal timestamps there is no evidence that input is reversed.
+    // Preserve source order rather than inventing rollbacks.
+    const direction = serviceInputDirection || inputTimestampDirection || 1;
     svc.progressRows.sort((a, b) =>
       a[0] - b[0] || (direction < 0 ? b[7] - a[7] : a[7] - b[7])
     );

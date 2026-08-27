@@ -115,6 +115,20 @@ node "$SKILL_DIR/scripts/parse.mjs" \
   --input "$TESTS_DIR/fixtures/reverse-same-timestamp-restart.log" \
   --output "$TEST_TMP_DIR/reverse-same-timestamp-restart.json" \
   --label reverse-same-timestamp-restart
+cat > "$TEST_TMP_DIR/same-timestamp-only.log" <<'LOG'
+api 2026-01-01T00:00:10.000Z INFO sqd:processor 100 / 1000, rate: 10 blocks/sec
+api 2026-01-01T00:00:10.000Z INFO sqd:processor 200 / 1000, rate: 10 blocks/sec
+api 2026-01-01T00:00:10.000Z INFO sqd:processor 300 / 1000, rate: 10 blocks/sec
+LOG
+node "$SKILL_DIR/scripts/parse.mjs" \
+  --input "$TEST_TMP_DIR/same-timestamp-only.log" \
+  --output "$TEST_TMP_DIR/same-timestamp-only.json" \
+  --label same-timestamp-only
+node -e '
+  const service = JSON.parse(require("fs").readFileSync(process.argv[1])).services.api;
+  if (service.progressRows.map(row => row[1]).join(",") !== "100,200,300") process.exit(1);
+  if (service.restarts.length !== 0) process.exit(1);
+' "$TEST_TMP_DIR/same-timestamp-only.json" || fail "parser reversed an unknown-direction same-timestamp capture"
 node "$TESTS_DIR/assert-parser.mjs" \
   "$TEST_TMP_DIR/current-levels.json" \
   "$TEST_TMP_DIR/restart.json" \
