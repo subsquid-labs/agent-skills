@@ -18,7 +18,7 @@
 //       progressSchema: ["tsMs","current","target","rate","mappingRate","itemsPerSec","etaSec"],
 //       progressRows: [[tsMs, current, target, rate, mappingRate, itemsPerSec, etaSec], ...],
 //       multicall: [{ tsMs, operation, block, chunks, groups, calls, latencyMs }, ...],
-//       restarts: [{ tsMs, fromBlock, resumedAtBlock }, ...],
+//       restarts: [{ rowIndex, tsMs, fromBlock, resumedAtBlock }, ...],
 //       errorCount, levelCounts: { warning, error },
 //       errors: [{ tsMs, level, logger, message }, ...]  // capped at 1000
 //       tier3: { "<logger>": { count, samples: [{ tsMs, fields: {unit: value, ...} }, ...] } }
@@ -30,7 +30,7 @@ import fs from "node:fs";
 import readline from "node:readline";
 import path from "node:path";
 
-const PARSER_VERSION = 4;
+const PARSER_VERSION = 5;
 
 // Line shape:  <service> <ISO-TS>Z <LEVEL> <logger> <message...>
 const LINE_RX =
@@ -272,6 +272,7 @@ async function main() {
       const curr = svc.progressRows[i];
       if (curr[1] < prev[1]) {
         svc.restarts.push({
+          rowIndex: i,
           tsMs: curr[0],
           fromBlock: prev[1],
           resumedAtBlock: curr[1],

@@ -414,8 +414,17 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
       // a negative range when the capture ends below its original first block.
       const restarts = s.restarts || [];
       const latestRestart = restarts.length > 0 ? restarts[restarts.length - 1] : null;
+      let restartRowIndex = latestRestart?.rowIndex;
+      if (latestRestart && !Number.isInteger(restartRowIndex)) {
+        restartRowIndex = s.progressRows.findIndex((row, index) =>
+          index > 0
+          && row[0] === latestRestart.tsMs
+          && row[1] === latestRestart.resumedAtBlock
+          && s.progressRows[index - 1][1] === latestRestart.fromBlock
+        );
+      }
       const progressRows = latestRestart
-        ? s.progressRows.filter(row => row[0] >= latestRestart.tsMs)
+        ? s.progressRows.slice(restartRowIndex >= 0 ? restartRowIndex : 0)
         : s.progressRows;
       const firstBlock = progressRows[0][1];
       const lastBlock = progressRows[progressRows.length - 1][1];

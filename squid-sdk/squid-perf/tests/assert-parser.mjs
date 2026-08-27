@@ -1,8 +1,10 @@
 import fs from "node:fs";
 
-const [levelsPath, restartPath, smallRestartPath] = process.argv.slice(2);
-if (!levelsPath || !restartPath || !smallRestartPath) {
-  throw new Error("usage: assert-parser.mjs <levels.json> <restart.json> <small-restart.json>");
+const [levelsPath, restartPath, smallRestartPath, sameTimestampRestartPath] = process.argv.slice(2);
+if (!levelsPath || !restartPath || !smallRestartPath || !sameTimestampRestartPath) {
+  throw new Error(
+    "usage: assert-parser.mjs <levels.json> <restart.json> <small-restart.json> <same-timestamp-restart.json>",
+  );
 }
 
 const levels = JSON.parse(fs.readFileSync(levelsPath, "utf8"));
@@ -24,4 +26,12 @@ if (smallRestart.lastBlock !== 4950) {
 }
 if (smallRestart.restarts.length !== 1) {
   throw new Error(`expected a 50-block rollback to count as one restart, got ${smallRestart.restarts.length}`);
+}
+
+const sameTimestampRestart = JSON.parse(fs.readFileSync(sameTimestampRestartPath, "utf8")).services.api;
+if (sameTimestampRestart.restarts.length !== 1 || sameTimestampRestart.restarts[0].rowIndex !== 2) {
+  throw new Error(`expected same-timestamp restart at row 2, got ${JSON.stringify(sameTimestampRestart.restarts)}`);
+}
+if (sameTimestampRestart.lastBlock !== 4500) {
+  throw new Error(`expected same-timestamp chronological last block 4500, got ${sameTimestampRestart.lastBlock}`);
 }
