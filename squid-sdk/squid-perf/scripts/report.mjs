@@ -190,12 +190,11 @@ function computeDowntimeMs(progressRows, startTsMs, endTsMs, downtimeThresholdMs
   return downtime;
 }
 
-function computeIntervalStats(progressRows, fromBlock, toBlock, maxTsMs = null) {
+function computeIntervalStats(progressRows, fromBlock, toBlock) {
   const rateArr = [], mapArr = [], itemsArr = [];
   for (const row of progressRows) {
     const cur = row[1];
     if (cur < fromBlock || cur > toBlock) continue;
-    if (maxTsMs != null && row[0] > maxTsMs) continue;
     if (row[3] != null) rateArr.push(row[3]);
     if (row[4] != null) mapArr.push(row[4]);
     if (row[5] != null) itemsArr.push(row[5]);
@@ -206,6 +205,13 @@ function computeIntervalStats(progressRows, fromBlock, toBlock, maxTsMs = null) 
     avgItems:   avg(itemsArr),
     samples:    rateArr.length,
   };
+}
+
+function progressRowsThroughCatchup(deployment) {
+  if (deployment.catchup == null || deployment.wasAlreadyCaughtUp) {
+    return deployment.progressRows;
+  }
+  return deployment.progressRows.slice(0, deployment.catchup.rowIndex + 1);
 }
 
 function multicallStatsInRange(multicall, fromBlock, toBlock, maxTsMs = null) {
@@ -555,6 +561,9 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
     for (const [label, dep] of Object.entries(perDeployment)) {
       if (!dep || dep.nonSync || !breakpoints || breakpoints.length === 0) { intervalStats[label] = null; continue; }
       const arr = [];
+      const intervalProgressRows = !breakpointsOverride
+        ? progressRowsThroughCatchup(dep)
+        : dep.progressRows;
       const syncEndTsMs = !breakpointsOverride && dep.catchup != null && !dep.wasAlreadyCaughtUp
         ? dep.catchup.tsMs
         : null;
@@ -564,10 +573,9 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
           from: prevBlock,
           to: bp,
           rates: computeIntervalStats(
-            dep.progressRows,
+            intervalProgressRows,
             dep.firstBlock + prevBlock,
             dep.firstBlock + bp,
-            syncEndTsMs,
           ),
           multicall: multicallStatsInRange(
             dep.multicall,
@@ -611,9 +619,7 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
     const chartSeries = {};
     for (const [label, dep] of Object.entries(perDeployment)) {
       if (!dep || dep.nonSync) continue;
-      const chartRows = dep.catchup != null && !dep.wasAlreadyCaughtUp
-        ? dep.progressRows.filter(row => row[0] <= dep.catchup.tsMs)
-        : dep.progressRows;
+      const chartRows = progressRowsThroughCatchup(dep);
       chartSeries[label] = sampleElapsedSeries(chartRows, dep.firstTsMs, dep.firstBlock);
     }
 
@@ -740,12 +746,9 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
       const rateBlobs = labels.map(l => {
         const deployment = s.perDeployment[l];
         const stats = computeIntervalStats(
-          deployment.progressRows,
+          progressRowsThroughCatchup(deployment),
           deployment.firstBlock,
           deployment.effectiveLastBlock,
-          deployment.catchup != null && !deployment.wasAlreadyCaughtUp
-            ? deployment.catchup.tsMs
-            : null,
         );
         return { label: l, ...stats };
       });

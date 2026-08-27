@@ -216,14 +216,18 @@ cat > "$TEST_TMP_DIR/edge-a.log" <<'LOG'
 api 2026-01-01T00:00:00.000Z INFO sqd:processor 100 / 1000, rate: 10 blocks/sec, mapping: 10 blocks/sec, 10 items/sec, eta: 90s
 api 2026-01-01T00:00:10.000Z INFO sqd:processor 500 / 1000, rate: 10 blocks/sec, mapping: 10 blocks/sec, 10 items/sec, eta: 50s
 api 2026-01-01T00:00:20.000Z INFO sqd:processor 995 / 1000, rate: 10 blocks/sec, mapping: 10 blocks/sec, 10 items/sec, eta: 0s
-api 2026-01-01T00:05:00.000Z INFO sqd:processor 995 / 1000, rate: 1000 blocks/sec, mapping: 1000 blocks/sec, 1000 items/sec, eta: 0s
+api 2026-01-01T00:00:20.000Z INFO sqd:processor 995 / 1000, rate: 1000 blocks/sec, mapping: 1000 blocks/sec, 1000 items/sec, eta: 0s
+api 2026-01-01T00:00:20.000Z INFO sqd:processor 1000 / 1000, rate: 1000 blocks/sec, mapping: 1000 blocks/sec, 1000 items/sec, eta: 0s
+api 2026-01-01T00:05:00.000Z INFO sqd:processor 1000 / 1000, rate: 1000 blocks/sec, mapping: 1000 blocks/sec, 1000 items/sec, eta: 0s
 api 2026-01-01T00:10:00.000Z INFO sqd:processor 1000 / 1000, rate: 1000 blocks/sec, mapping: 1000 blocks/sec, 1000 items/sec, eta: 0s
 LOG
 cat > "$TEST_TMP_DIR/edge-b.log" <<'LOG'
 api 2026-01-01T00:00:00.000Z INFO sqd:processor 100 / 1000, rate: 10 blocks/sec, mapping: 10 blocks/sec, 10 items/sec, eta: 90s
 api 2026-01-01T00:00:10.000Z INFO sqd:processor 500 / 1000, rate: 10 blocks/sec, mapping: 10 blocks/sec, 10 items/sec, eta: 50s
 api 2026-01-01T00:00:20.000Z INFO sqd:processor 995 / 1000, rate: 10 blocks/sec, mapping: 10 blocks/sec, 10 items/sec, eta: 0s
-api 2026-01-01T00:05:00.000Z INFO sqd:processor 995 / 1000, rate: 1 blocks/sec, mapping: 1 blocks/sec, 1 items/sec, eta: 0s
+api 2026-01-01T00:00:20.000Z INFO sqd:processor 995 / 1000, rate: 1 blocks/sec, mapping: 1 blocks/sec, 1 items/sec, eta: 0s
+api 2026-01-01T00:00:20.000Z INFO sqd:processor 1000 / 1000, rate: 1 blocks/sec, mapping: 1 blocks/sec, 1 items/sec, eta: 0s
+api 2026-01-01T00:05:00.000Z INFO sqd:processor 1000 / 1000, rate: 1 blocks/sec, mapping: 1 blocks/sec, 1 items/sec, eta: 0s
 api 2026-01-01T00:10:00.000Z INFO sqd:processor 1000 / 1000, rate: 1 blocks/sec, mapping: 1 blocks/sec, 1 items/sec, eta: 0s
 LOG
 node "$SKILL_DIR/scripts/parse.mjs" --input "$TEST_TMP_DIR/edge-a.log" --output "$EDGE_REPORT_DIR/parsed/edge-a.json" --label edge-a
@@ -233,7 +237,7 @@ node "$SKILL_DIR/scripts/report.mjs" --run-dir "$EDGE_REPORT_DIR"
 if grep -q 'Likely the dominant bottleneck' "$EDGE_REPORT_DIR/report.md"; then
   fail "rate finding included post-catchup idle-tail samples"
 fi
-if grep -Fq '505.0 blk/s' "$EDGE_REPORT_DIR/report.md" || grep -Fq '5.5 blk/s' "$EDGE_REPORT_DIR/report.md"; then
+if grep -Fq '257.5 blk/s' "$EDGE_REPORT_DIR/report.md" || grep -Fq '7.8 blk/s' "$EDGE_REPORT_DIR/report.md"; then
   fail "interval rate table included post-catchup idle-tail samples"
 fi
 node -e '
