@@ -294,6 +294,7 @@ node -e '
   if (!service || service.breakpoints.length !== 1) process.exit(1);
   if (service.breakpoints[0].block !== 1000) process.exit(1);
   if (!service.breakpoints[0].perIndexer["edge-a"].reached || !service.breakpoints[0].perIndexer["edge-b"].reached) process.exit(1);
+  if (service.progress["edge-a"].at(-1)?.block !== 1000 || service.progress["edge-b"].at(-1)?.block !== 1000) process.exit(1);
 ' "$EDGE_REPORT_DIR/report.html" || fail "override breakpoint was truncated to the catch-up range"
 
 printf 'test: report warns when ending coverage ranges diverge\n' >&2

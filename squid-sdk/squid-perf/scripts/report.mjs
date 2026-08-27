@@ -641,7 +641,9 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
     const chartSeries = {};
     for (const [label, dep] of Object.entries(perDeployment)) {
       if (!dep || dep.nonSync) continue;
-      const chartRows = progressRowsThroughCatchup(dep);
+      const chartRows = breakpointsOverride
+        ? dep.progressRows
+        : progressRowsThroughCatchup(dep);
       chartSeries[label] = sampleElapsedSeries(chartRows, dep.firstTsMs, dep.firstBlock);
     }
 
