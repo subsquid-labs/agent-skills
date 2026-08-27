@@ -277,8 +277,10 @@ node -e '
   for (const label of ["edge-a", "edge-b"]) {
     const progress = service?.progress?.[label];
     if (!progress || progress.at(-1)?.block !== 995 || progress.at(-1)?.t !== 20) process.exit(1);
+    if (service.tier2?.[label]?.multicallMeanMs !== 10) process.exit(1);
+    if (service.tier2?.[label]?.multicallP95Ms !== 10) process.exit(1);
   }
-' "$EDGE_REPORT_DIR/report.html" || fail "progress chart included post-catchup idle-tail samples"
+' "$EDGE_REPORT_DIR/report.html" || fail "HTML summary included post-catchup idle-tail samples"
 node "$SKILL_DIR/scripts/report.mjs" --run-dir "$EDGE_REPORT_DIR" --breakpoints 900
 node -e '
   const lines = require("fs").readFileSync(process.argv[1], "utf8").split("\n");

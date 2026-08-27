@@ -214,12 +214,24 @@ function progressRowsThroughCatchup(deployment) {
   return deployment.progressRows.slice(0, deployment.catchup.rowIndex + 1);
 }
 
-function multicallStatsInRange(multicall, fromBlock, toBlock, maxTsMs = null, maxSequence = null) {
+function multicallsThroughCatchup(deployment) {
+  if (deployment.catchup == null || deployment.wasAlreadyCaughtUp) {
+    return deployment.multicall;
+  }
+  const { tsMs, sequence } = deployment.catchup;
+  return deployment.multicall.filter(sample =>
+    sample.tsMs < tsMs
+    || (
+      sample.tsMs === tsMs
+      && (sequence == null || sample.sequence == null || sample.sequence <= sequence)
+    )
+  );
+}
+
+function multicallStatsInRange(multicall, fromBlock, toBlock) {
   const latencies = [], callCounts = [];
   for (const mc of multicall) {
     if (mc.block < fromBlock || mc.block > toBlock) continue;
-    if (maxTsMs != null && mc.tsMs > maxTsMs) continue;
-    if (maxTsMs != null && mc.tsMs === maxTsMs && maxSequence != null && mc.sequence > maxSequence) continue;
     latencies.push(mc.latencyMs);
     callCounts.push(mc.calls);
   }
@@ -575,9 +587,9 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
       const intervalProgressRows = !breakpointsOverride
         ? progressRowsThroughCatchup(dep)
         : dep.progressRows;
-      const syncEndTsMs = !breakpointsOverride && dep.catchup != null && !dep.wasAlreadyCaughtUp
-        ? dep.catchup.tsMs
-        : null;
+      const intervalMulticall = !breakpointsOverride
+        ? multicallsThroughCatchup(dep)
+        : dep.multicall;
       let prevBlock = 0;
       for (const bp of breakpoints) {
         arr.push({
@@ -589,11 +601,9 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
             dep.firstBlock + bp,
           ),
           multicall: multicallStatsInRange(
-            dep.multicall,
+            intervalMulticall,
             dep.firstBlock + prevBlock,
             dep.firstBlock + bp,
-            syncEndTsMs,
-            !breakpointsOverride ? dep.catchup?.sequence ?? null : null,
           ),
         });
         prevBlock = bp;
@@ -1073,7 +1083,10 @@ function mapServiceForReport(s, breakpointsOverride) {
       };
       continue;
     }
-    const latencies = (d.multicall || []).map(m => m.latencyMs).filter(x => x != null);
+    const tier2Multicall = breakpointsOverride == null
+      ? multicallsThroughCatchup(d)
+      : (d.multicall || []);
+    const latencies = tier2Multicall.map(m => m.latencyMs).filter(x => x != null);
     const entry = {
       restarts: (d.restarts || []).length,
       errors: errorCount,
