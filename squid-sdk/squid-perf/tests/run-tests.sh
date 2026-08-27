@@ -101,7 +101,15 @@ node "$SKILL_DIR/scripts/parse.mjs" \
   --input "$TESTS_DIR/fixtures/restart.log" \
   --output "$TEST_TMP_DIR/restart.json" \
   --label restart
-node "$TESTS_DIR/assert-parser.mjs" "$TEST_TMP_DIR/current-levels.json" "$TEST_TMP_DIR/restart.json"
+printf 'test: parser counts small backward jumps and keeps the chronological final block\n' >&2
+node "$SKILL_DIR/scripts/parse.mjs" \
+  --input "$TESTS_DIR/fixtures/small-restart.log" \
+  --output "$TEST_TMP_DIR/small-restart.json" \
+  --label small-restart
+node "$TESTS_DIR/assert-parser.mjs" \
+  "$TEST_TMP_DIR/current-levels.json" \
+  "$TEST_TMP_DIR/restart.json" \
+  "$TEST_TMP_DIR/small-restart.json"
 
 printf 'test: parser counts errors beyond the retained sample cap\n' >&2
 ERROR_LOG="$TEST_TMP_DIR/error-cap.log"
@@ -209,4 +217,4 @@ node -e '
   if (!service.breakpoints[0].perIndexer["edge-a"].reached || !service.breakpoints[0].perIndexer["edge-b"].reached) process.exit(1);
 ' "$EDGE_REPORT_DIR/report.html" || fail "override breakpoint was truncated to the catch-up range"
 
-printf '{"status":"ok","tests":11}\n'
+printf '{"status":"ok","tests":12}\n'
