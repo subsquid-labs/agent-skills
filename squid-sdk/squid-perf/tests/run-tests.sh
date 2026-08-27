@@ -200,7 +200,7 @@ cat > "$EDGE_REPORT_DIR/compare-syncs.json" <<'JSON'
 {
   "createdAt": "2026-01-01T00:00:00Z",
   "downtimeThresholdSec": 120,
-  "breakpointsOverride": [900],
+  "breakpointsOverride": null,
   "indexers": [
     { "ref": "org/edge-a@abc", "since": "2026-01-01T00:00:00Z", "label": "edge-a" },
     { "ref": "org/edge-b@def", "since": "2026-01-01T00:00:00Z", "label": "edge-b" }
@@ -224,10 +224,14 @@ LOG
 node "$SKILL_DIR/scripts/parse.mjs" --input "$TEST_TMP_DIR/edge-a.log" --output "$EDGE_REPORT_DIR/parsed/edge-a.json" --label edge-a
 node "$SKILL_DIR/scripts/parse.mjs" --input "$TEST_TMP_DIR/edge-b.log" --output "$EDGE_REPORT_DIR/parsed/edge-b.json" --label edge-b
 printf '[]\n' > "$EDGE_REPORT_DIR/failures.json"
-node "$SKILL_DIR/scripts/report.mjs" --run-dir "$EDGE_REPORT_DIR" --breakpoints 900
+node "$SKILL_DIR/scripts/report.mjs" --run-dir "$EDGE_REPORT_DIR"
 if grep -q 'Likely the dominant bottleneck' "$EDGE_REPORT_DIR/report.md"; then
   fail "rate finding included post-catchup idle-tail samples"
 fi
+if grep -Fq '505.0 blk/s' "$EDGE_REPORT_DIR/report.md" || grep -Fq '5.5 blk/s' "$EDGE_REPORT_DIR/report.md"; then
+  fail "interval rate table included post-catchup idle-tail samples"
+fi
+node "$SKILL_DIR/scripts/report.mjs" --run-dir "$EDGE_REPORT_DIR" --breakpoints 900
 node -e '
   const lines = require("fs").readFileSync(process.argv[1], "utf8").split("\n");
   const templateLine = lines.findIndex(line => line.includes("type=\"__bundler/template\"") && line.trim().startsWith("<script"));
@@ -242,4 +246,32 @@ node -e '
   if (!service.breakpoints[0].perIndexer["edge-a"].reached || !service.breakpoints[0].perIndexer["edge-b"].reached) process.exit(1);
 ' "$EDGE_REPORT_DIR/report.html" || fail "override breakpoint was truncated to the catch-up range"
 
-printf '{"status":"ok","tests":14}\n'
+printf 'test: report warns when ending coverage ranges diverge\n' >&2
+RANGE_REPORT_DIR="$TEST_TMP_DIR/range-report-run"
+mkdir -p "$RANGE_REPORT_DIR/parsed"
+cat > "$RANGE_REPORT_DIR/compare-syncs.json" <<'JSON'
+{
+  "createdAt": "2026-01-01T00:00:00Z",
+  "downtimeThresholdSec": 120,
+  "breakpointsOverride": null,
+  "indexers": [
+    { "ref": "org/range-a@abc", "since": "2026-01-01T00:00:00Z", "label": "range-a" },
+    { "ref": "org/range-b@def", "since": "2026-01-01T00:00:00Z", "label": "range-b" }
+  ]
+}
+JSON
+cat > "$TEST_TMP_DIR/range-a.log" <<'LOG'
+api 2026-01-01T00:00:00.000Z INFO sqd:processor 100 / 1000, rate: 10 blocks/sec
+api 2026-01-01T00:00:20.000Z INFO sqd:processor 995 / 1000, rate: 10 blocks/sec
+LOG
+cat > "$TEST_TMP_DIR/range-b.log" <<'LOG'
+api 2026-01-01T00:00:00.000Z INFO sqd:processor 100 / 2000, rate: 10 blocks/sec
+api 2026-01-01T00:00:20.000Z INFO sqd:processor 1995 / 2000, rate: 10 blocks/sec
+LOG
+node "$SKILL_DIR/scripts/parse.mjs" --input "$TEST_TMP_DIR/range-a.log" --output "$RANGE_REPORT_DIR/parsed/range-a.json" --label range-a
+node "$SKILL_DIR/scripts/parse.mjs" --input "$TEST_TMP_DIR/range-b.log" --output "$RANGE_REPORT_DIR/parsed/range-b.json" --label range-b
+printf '[]\n' > "$RANGE_REPORT_DIR/failures.json"
+node "$SKILL_DIR/scripts/report.mjs" --run-dir "$RANGE_REPORT_DIR"
+grep -Fq "starting or ending coverage differs by > 5%" "$RANGE_REPORT_DIR/report.md" || fail "ending-range divergence warning is missing"
+
+printf '{"status":"ok","tests":15}\n'

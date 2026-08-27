@@ -208,10 +208,11 @@ function computeIntervalStats(progressRows, fromBlock, toBlock, maxTsMs = null) 
   };
 }
 
-function multicallStatsInRange(multicall, fromBlock, toBlock) {
+function multicallStatsInRange(multicall, fromBlock, toBlock, maxTsMs = null) {
   const latencies = [], callCounts = [];
   for (const mc of multicall) {
     if (mc.block < fromBlock || mc.block > toBlock) continue;
+    if (maxTsMs != null && mc.tsMs > maxTsMs) continue;
     latencies.push(mc.latencyMs);
     callCounts.push(mc.calls);
   }
@@ -376,6 +377,8 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
     let minEffectiveRange = Infinity;
     let minRawRange = Infinity;
     const deploymentFirstBlocks = [];
+    const deploymentEffectiveRanges = [];
+    const deploymentRawRanges = [];
 
     for (const p of parsed) {
       const s = p.services[serviceName];
@@ -462,6 +465,8 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
       if (effectiveRange > 0) minEffectiveRange = Math.min(minEffectiveRange, effectiveRange);
       if (rawRange > 0) minRawRange = Math.min(minRawRange, rawRange);
       deploymentFirstBlocks.push(firstBlock);
+      deploymentEffectiveRanges.push(effectiveRange);
+      deploymentRawRanges.push(rawRange);
 
       perDeployment[p.meta.label] = {
         firstBlock, lastBlock, effectiveLastBlock,
@@ -506,12 +511,23 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
       breakpoints = onlyDeployment ? generateBreakpoints(onlyDeployment.range) : [];
     }
 
-    // Range-divergence detection: if firstBlocks vary by > 5% of min effective range.
+    // Range-divergence detection covers both starting-block alignment and
+    // shortened effective/raw ending coverage.
     let rangeDivergence = false;
     if (deploymentFirstBlocks.length >= 2 && isFinite(minEffectiveRange)) {
       const minFirst = Math.min(...deploymentFirstBlocks);
       const maxFirst = Math.max(...deploymentFirstBlocks);
       if (minEffectiveRange > 0 && (maxFirst - minFirst) / minEffectiveRange > 0.05) rangeDivergence = true;
+    }
+    const hasRangeSpread = values => {
+      if (values.length < 2) return false;
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      if (min === max) return false;
+      return min <= 0 || (max - min) / min > 0.05;
+    };
+    if (hasRangeSpread(deploymentEffectiveRanges) || hasRangeSpread(deploymentRawRanges)) {
+      rangeDivergence = true;
     }
 
     // Per-deployment breakpoint timings.
@@ -539,13 +555,26 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
     for (const [label, dep] of Object.entries(perDeployment)) {
       if (!dep || dep.nonSync || !breakpoints || breakpoints.length === 0) { intervalStats[label] = null; continue; }
       const arr = [];
+      const syncEndTsMs = !breakpointsOverride && dep.catchup != null && !dep.wasAlreadyCaughtUp
+        ? dep.catchup.tsMs
+        : null;
       let prevBlock = 0;
       for (const bp of breakpoints) {
         arr.push({
           from: prevBlock,
           to: bp,
-          rates: computeIntervalStats(dep.progressRows, dep.firstBlock + prevBlock, dep.firstBlock + bp),
-          multicall: multicallStatsInRange(dep.multicall, dep.firstBlock + prevBlock, dep.firstBlock + bp),
+          rates: computeIntervalStats(
+            dep.progressRows,
+            dep.firstBlock + prevBlock,
+            dep.firstBlock + bp,
+            syncEndTsMs,
+          ),
+          multicall: multicallStatsInRange(
+            dep.multicall,
+            dep.firstBlock + prevBlock,
+            dep.firstBlock + bp,
+            syncEndTsMs,
+          ),
         });
         prevBlock = bp;
       }
@@ -762,7 +791,7 @@ function compute(config, parsed, downtimeThresholdSec, breakpointsOverride) {
   }
   for (const s of services) {
     if (s.rangeDivergence) {
-      warnings.push(`**${s.name}** — deployments' first-block values diverge by > 5%. Comparison may not be apples-to-apples.`);
+      warnings.push(`**${s.name}** — deployments' starting or ending coverage differs by > 5%. Comparison may not be apples-to-apples.`);
     }
     for (const [label, cu] of Object.entries(s.catchupSummary || {})) {
       if (!cu) continue;
@@ -1066,7 +1095,7 @@ function mapServiceForReport(s, breakpointsOverride) {
     inlineWarnings.push({
       kind: "range-divergence",
       service: s.name,
-      message: `Deployments' first-block values diverge by > 5% for ${s.name}.`,
+      message: `Deployments' starting or ending coverage differs by > 5% for ${s.name}.`,
     });
   }
   for (const [label, cu] of Object.entries(s.catchupSummary || {})) {
@@ -1152,7 +1181,7 @@ function structuredWarning(raw) {
   if (/within 60s of fetch time/i.test(message)) kind = "live";
   else if (/never reached chain tip/i.test(message)) kind = "never-caught-up";
   else if (/already at chain tip/i.test(message)) kind = "already-caught-up";
-  else if (/first-block values diverge/i.test(message)) kind = "range-divergence";
+  else if (/first-block values diverge|starting or ending coverage differs/i.test(message)) kind = "range-divergence";
   else if (/missing services/i.test(message)) kind = "solo-service";
   return { kind, message };
 }
@@ -1295,7 +1324,7 @@ function renderMd({ config, parsed, compute, failures, runId, htmlRelPath }) {
 
     const marker = svc.inIntersection ? "" : " (solo)";
     lines.push(`## ${svc.name}${marker}\n`);
-    if (svc.rangeDivergence) lines.push(`> ⚠ Range divergence detected — deployments' first blocks differ noticeably.\n`);
+    if (svc.rangeDivergence) lines.push(`> ⚠ Range divergence detected — deployments' starting or ending coverage differs noticeably.\n`);
 
     const timings = svc.breakpointTimings;
     const referenceLabel = labels.find(l => timings[l]) || labels[0];
