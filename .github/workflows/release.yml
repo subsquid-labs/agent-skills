@@ -63,14 +63,24 @@ jobs:
           # Unversioned filename on purpose: it keeps
           # releases/latest/download/sqd-skills.tar.gz resolving to the newest
           # release. The version is carried by the tag and the release title.
-          tar -czf sqd-skills.tar.gz \
+          #
+          # The bundle is flattened: every skill sits at the archive root, so
+          # the skills CLI's default (depth-1) discovery finds all of them.
+          # Repo layout nests two skills under squid-sdk/, which the CLI only
+          # sees with --full-depth — the bundle should not inherit that.
+          stage=$(mktemp -d)
+          cp -R pipes-sdk portal squid-sdk/migrate-to-portal squid-sdk/squid-perf "${stage}/"
+          cp README.md AGENTS.md CHANGELOG.md LICENSE "${stage}/"
+          tar -czf sqd-skills.tar.gz -C "${stage}" \
             pipes-sdk \
             portal \
-            squid-sdk \
+            migrate-to-portal \
+            squid-perf \
             README.md \
             AGENTS.md \
             CHANGELOG.md \
             LICENSE
+          rm -rf "${stage}"
 
       - name: Publish release
         env:
