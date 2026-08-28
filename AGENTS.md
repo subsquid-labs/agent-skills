@@ -94,8 +94,8 @@ Only the skill name and description load at agent startup. The full `SKILL.md` l
 ### End-User Installation
 
 ```bash
-# All skills
-npx skills add subsquid-labs/skills --all
+# All skills (--full-depth is required: two skills nest under squid-sdk/)
+npx skills add subsquid-labs/skills --all --full-depth
 
 # Individual
 npx skills add subsquid-labs/skills/pipes-sdk

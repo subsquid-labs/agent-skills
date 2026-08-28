@@ -17,8 +17,11 @@ Skills follow the [Agent Skills](https://agentskills.io/) format.
 
 **Install all skills:**
 ```bash
-npx skills add subsquid-labs/skills --all
+npx skills add subsquid-labs/skills --all --full-depth
 ```
+
+(`--full-depth` matters: two skills live one directory down, and the skills CLI
+only finds them with it.)
 
 **Install individually:**
 ```bash
@@ -36,8 +39,9 @@ The commands above track `main`. To install an exact, unchanging version, append
 a release tag — optionally with `@<skill>` to take a single skill from it:
 
 ```bash
-npx skills add subsquid-labs/skills#v1.0.0
+npx skills add subsquid-labs/skills#v1.0.0 --full-depth
 npx skills add subsquid-labs/skills#v1.0.0@portal
+npx skills add subsquid-labs/skills#v1.0.0@squid-perf --full-depth
 ```
 
 Every release also attaches a bundle of all skills:
