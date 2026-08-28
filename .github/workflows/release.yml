@@ -69,7 +69,8 @@ jobs:
             squid-sdk \
             README.md \
             AGENTS.md \
-            CHANGELOG.md
+            CHANGELOG.md \
+            LICENSE
 
       - name: Publish release
         env:

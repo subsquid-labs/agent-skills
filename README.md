@@ -106,4 +106,4 @@ Open a focused pull request and validate every changed skill with the `skills-re
 
 ## License
 
-MIT
+[Apache-2.0](./LICENSE), matching the other SQD repositories.
