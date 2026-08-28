@@ -135,3 +135,65 @@ uvx --from skills-ref agentskills validate ./{skill-name}
 ```
 
 This checks that `SKILL.md` frontmatter is valid and follows naming conventions.
+
+The release workflow runs this same check against all four skill directories, so
+a skill that fails validation cannot ship in a release.
+
+## Releases
+
+Releases are cut from repo-wide semver tags (`vMAJOR.MINOR.PATCH`). Pushing a
+`v*` tag triggers `.github/workflows/release.yml`, which validates every skill,
+builds the release notes, attaches a `sqd-skills.tar.gz` bundle, and publishes.
+
+### What each level means
+
+This is a skills repo rather than a library, so the levels are defined in terms
+of what breaks for someone who has already installed:
+
+- **MAJOR** — a skill is removed or renamed, or an install path changes. Breaks
+  existing install commands and pinned refs.
+- **MINOR** — a new skill, or substantive new capability in an existing one.
+- **PATCH** — corrections, refreshes tracking upstream SQD API changes, doc
+  fixes. Most changes are this.
+
+Repo tags are independent of the per-skill `metadata.version` in each
+`SKILL.md`. Both keep moving; each release body carries a generated table of the
+skill versions it contains, so the two never have to be reconciled by hand.
+
+### Writing changelog entries
+
+`CHANGELOG.md` is the source of truth for release notes. Entries describe the
+**user-visible effect**, not the commit:
+
+```
+✅ Fixed squid-perf reporting inflated sync rates when an indexer restarted
+   mid-run.
+❌ fix: correct squid performance statistics (#42)
+```
+
+Use only `### New`, `### Improved`, and `### Fixed`, and omit any section with
+no entries. The commit-level detail is appended automatically to each release,
+so the changelog does not need to repeat it.
+
+Adding an entry under `## Unreleased` in the PR that makes the change is
+encouraged but not enforced. Whoever cuts the release reviews merged PRs since
+the last tag and fills the gaps.
+
+### Cutting a release
+
+```bash
+# 1. Move the `## Unreleased` entries under a versioned heading, filling any
+#    gaps from PRs merged since the last tag:
+#      ## <Month D, YYYY> — v<X.Y.Z>
+# 2. Check the notes render as expected:
+node .github/scripts/changelog-section.mjs v1.2.0
+node .github/scripts/skill-manifest.mjs
+
+# 3. Commit the changelog to main, then tag and push:
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+To rehearse without publishing a stable release, push a suffixed tag such as
+`v1.2.0-rc.1`. It publishes as a prerelease, is not marked "Latest", and reuses
+the `v1.2.0` changelog section rather than needing one of its own.

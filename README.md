@@ -30,6 +30,25 @@ npx skills add subsquid-labs/skills/squid-sdk/squid-perf
 
 Skills activate automatically once installed — the agent picks the right one based on your task.
 
+**Pin to a release:**
+
+The commands above track `main`. To install an exact, unchanging version, append
+a release tag — optionally with `@<skill>` to take a single skill from it:
+
+```bash
+npx skills add subsquid-labs/skills#v1.0.0
+npx skills add subsquid-labs/skills#v1.0.0@portal
+```
+
+Every release also attaches a bundle of all skills:
+
+```bash
+npx skills add https://github.com/subsquid-labs/skills/releases/latest/download/sqd-skills.tar.gz
+```
+
+See [Releases](https://github.com/subsquid-labs/skills/releases) for what changed
+in each version, or [CHANGELOG.md](./CHANGELOG.md).
+
 ## Example Prompts
 
 ```
@@ -83,8 +102,8 @@ Why is my indexer syncing slowly?
 
 ## Contributing
 
-Open a focused pull request and validate every changed skill with the `skills-ref` command documented in [AGENTS.md](./AGENTS.md#validation).
+Open a focused pull request and validate every changed skill with the `skills-ref` command documented in [AGENTS.md](./AGENTS.md#validation). If your change is user-visible, add an entry under `## Unreleased` in [CHANGELOG.md](./CHANGELOG.md) — see [Releases](./AGENTS.md#releases) for the conventions.
 
 ## License
 
-MIT
+[Apache-2.0](./LICENSE), matching the other SQD repositories.

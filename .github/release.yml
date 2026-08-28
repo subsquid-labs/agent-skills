@@ -1,0 +1,23 @@
+# Shapes the auto-generated "What's Changed" list that GitHub appends below the
+# hand-written CHANGELOG.md notes in each release body.
+#
+# This repo does not currently label PRs, so the `*` catch-all is what makes the
+# list correct today. The categories above it start working on their own if the
+# labels are ever adopted; the catch-all must stay last.
+changelog:
+  categories:
+    - title: New skills
+      labels:
+        - 'skill:new'
+    - title: Skill updates
+      labels:
+        - 'skill:update'
+    - title: Fixes
+      labels:
+        - 'fix'
+    - title: Documentation
+      labels:
+        - 'docs'
+    - title: All changes
+      labels:
+        - '*'

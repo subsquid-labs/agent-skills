@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Validate and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          # Any tag carrying a suffix (v1.0.0-rc.1) ships as a prerelease.
+          if [[ "${TAG}" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate skills
+        run: |
+          # A venv rather than a bare `pip install`, so this does not depend on
+          # the runner image's PEP 668 stance or on pipx being preinstalled.
+          python3 -m venv .venv
+          ./.venv/bin/pip install --quiet skills-ref
+          for skill in ./pipes-sdk ./portal ./squid-sdk/migrate-to-portal ./squid-sdk/squid-perf; do
+            echo "::group::validate ${skill}"
+            ./.venv/bin/agentskills validate "${skill}"
+            echo "::endgroup::"
+          done
+          rm -rf .venv
+
+      - name: Build release body
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          # Fails the release when CHANGELOG.md has no section for this tag.
+          node .github/scripts/changelog-section.mjs "${TAG}" > body.md
+          {
+            printf '\n\n### Skills in this release\n\n'
+            node .github/scripts/skill-manifest.mjs
+          } >> body.md
+          echo "::group::release body"
+          cat body.md
+          echo "::endgroup::"
+
+      - name: Build bundle
+        run: |
+          # Unversioned filename on purpose: it keeps
+          # releases/latest/download/sqd-skills.tar.gz resolving to the newest
+          # release. The version is carried by the tag and the release title.
+          tar -czf sqd-skills.tar.gz \
+            pipes-sdk \
+            portal \
+            squid-sdk \
+            README.md \
+            AGENTS.md \
+            CHANGELOG.md \
+            LICENSE
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+        run: |
+          args=(--title "${TAG}" --generate-notes --notes-file body.md)
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            args+=(--prerelease --latest=false)
+          fi
+          gh release create "${TAG}" "${args[@]}" sqd-skills.tar.gz
