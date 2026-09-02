@@ -108,6 +108,11 @@ Why is my indexer syncing slowly?
 
 Open a focused pull request and validate every changed skill with the `skills-ref` command documented in [AGENTS.md](./AGENTS.md#validation). If your change is user-visible, add an entry under `## Unreleased` in [CHANGELOG.md](./CHANGELOG.md) — see [Releases](./AGENTS.md#releases) for the conventions.
 
+Every push to `main` dispatches the plugin bundle sync in
+[`subsquid-labs/portal-mcp-server`](https://github.com/subsquid-labs/portal-mcp-server). Repository
+maintainers must configure the `PORTAL_MCP_SERVER_DISPATCH_TOKEN` Actions secret with a
+fine-grained token that has **Contents: write** permission on that repository.
+
 ## License
 
 [Apache-2.0](./LICENSE), matching the other SQD repositories.
