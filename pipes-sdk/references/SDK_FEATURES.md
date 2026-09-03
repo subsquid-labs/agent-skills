@@ -458,7 +458,9 @@ stream.pipeTo(bigqueryTarget({
 }))
 ```
 
-Key facts: tables auto-create with `PARTITION BY RANGE_BUCKET(block_number, …)` (partition column forced `INT64 NOT NULL`); declared schema is enforced against existing tables (fails fast on mismatch); reorgs run bounded `DELETE`s per tracked table, resumed idempotently after crashes. An optional `onBeforeRollback: async ({ cursor }) => ...` fires after the safe cursor resolves, before the per-table `DELETE`s. Gotchas: `TIMESTAMP` wire format is INT64 **microseconds** (`date.getTime() * 1000` — ISO strings are NOT parsed); uint256 overflows BIGNUMERIC (38 integer digits) — clamp and keep the exact decimal in a STRING column.
+Key facts: tables auto-create with `PARTITION BY RANGE_BUCKET(block_number, …)` (partition column forced `INT64 NOT NULL`); declared schema is enforced against existing tables (fails fast on mismatch); reorgs run bounded `DELETE`s per tracked table, resumed idempotently after crashes. An optional `onBeforeRollback: async ({ cursor }) => ...` fires after the safe cursor resolves, before the per-table `DELETE`s. Gotchas: `TIMESTAMP` wire format is INT64 **microseconds** (`date.getTime() * 1000`; a JS `Date` also works, a raw milliseconds number lands in 1970 — see [BIGQUERY_TARGET.md](BIGQUERY_TARGET.md#the-timestamp-microseconds-rule)); uint256 overflows BIGNUMERIC (max ≈ 5.79e38) — clamp and keep the exact decimal in a STRING column.
+
+Deep reference — the full `bigqueryTarget` option set, GCP prerequisites, the `sync` WAL table, fork and crash recovery, the `E2201`–`E2213` codes, and query-cost rules: [BIGQUERY_TARGET.md](BIGQUERY_TARGET.md).
 
 ### Google Pub/Sub (beta.2+, current protocol in beta.4)
 

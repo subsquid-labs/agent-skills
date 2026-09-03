@@ -14,7 +14,7 @@ It honors the `Retry-After` header when Portal sends one (mandatory on `overload
 
 What still kills the process (and what supervisors are for):
 - **Decode errors** — an undecodable record is fatal by default (see the `onError` hook in [SDK_FEATURES.md](SDK_FEATURES.md#decode-error-hook-onerror))
-- **Sink failures** — ClickHouse/Postgres down or misconfigured, schema drift
+- **Sink failures** — ClickHouse/Postgres down or misconfigured, schema drift; for BigQuery, a missing dataset or a declared schema that no longer matches the live table (see [BIGQUERY_TARGET.md](BIGQUERY_TARGET.md))
 - **Non-retryable Portal errors** — `invalid_request_error` (`malformed_request`, `unknown_dataset`): the request is wrong and retrying can't help
 - **Process-level faults** — OOM kills, unhandled exceptions in your `.pipe()` transforms, host reboots
 

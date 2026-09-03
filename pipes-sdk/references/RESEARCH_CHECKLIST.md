@@ -202,7 +202,7 @@ This data enables:
 1. **Which events?** All listed or subset?
 2. **Which chain?** [Detected chain] or multi-chain?
 3. **Time range?** Full history or recent blocks?
-4. **Storage?** ClickHouse (recommended) or PostgreSQL?
+4. **Storage?** ClickHouse (recommended), PostgreSQL, or BigQuery?
 ```
 
 ## When to Stop Searching
@@ -224,6 +224,7 @@ This data enables:
 ### After research approved:
 - **ABI_GUIDE.md**: Fetch full ABI from block explorer and generate TypeScript types
 - **SCHEMA_GUIDE.md**: Design ClickHouse schema for the indexed events
+- **BIGQUERY_TARGET.md**: Table, partition, and cluster design when the sink is BigQuery
 - **TEMPLATES.md**: Pick the right CLI template and generate the project
 - **TROUBLESHOOTING.md**: Debug if issues arise
 
