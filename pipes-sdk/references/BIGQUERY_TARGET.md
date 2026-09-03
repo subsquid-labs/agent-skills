@@ -124,10 +124,12 @@ import { type BigQueryWriter, bigqueryTarget } from '@subsquid/pipes/targets/big
 
 const PROJECT = process.env.BIGQUERY_PROJECT!
 const DATASET = process.env.BIGQUERY_DATASET ?? 'eth_transfers'
+const LOCATION = process.env.BIGQUERY_LOCATION ?? 'US'   // fixed at dataset creation, never changeable
 
-// See "The uint256 / BIGNUMERIC precision limit" for why this clamp exists.
+// See "The uint256 / BIGNUMERIC precision limit". Out-of-range values become NULL rather
+// than saturating: a clamped value would silently corrupt every SUM over the column.
 const BIGNUMERIC_INT_MAX = 10n ** 38n - 1n
-const clampBignumeric = (v: bigint) => (v > BIGNUMERIC_INT_MAX ? BIGNUMERIC_INT_MAX : v).toString()
+const asBignumeric = (v: bigint) => (v > BIGNUMERIC_INT_MAX ? null : v.toString())
 
 async function main() {
   const bigquery = new BigQuery({ projectId: PROJECT })
@@ -136,9 +138,11 @@ async function main() {
   const writer = new managedwriter.WriterClient({ projectId: PROJECT })
   let store: BigQueryWriter | undefined
 
-  // The target creates TABLES, never the DATASET. This is the operator's one-time call.
+  // The target creates TABLES, never the DATASET. This is the operator's one-time call, and
+  // it needs bigquery.datasets.create on top of the roles listed under "Minimum IAM".
+  // The location is fixed here forever — see "Dataset location" before picking one.
   const [exists] = await bigquery.dataset(DATASET).exists()
-  if (!exists) await bigquery.createDataset(DATASET)
+  if (!exists) await bigquery.createDataset(DATASET, { location: LOCATION })
 
   await evmPortalStream({
     id: 'erc20-transfers',                       // this id keys the WAL cursor — renaming it orphans progress
@@ -182,7 +186,7 @@ async function main() {
             token: t.rawEvent.address,
             from: t.event.from,
             to: t.event.to,
-            amount: clampBignumeric(t.event.value),
+            amount: asBignumeric(t.event.value),                          // NULL when out of BIGNUMERIC range
             amount_raw: t.event.value.toString(),
           })),
         )
@@ -306,16 +310,35 @@ What is not safe is a raw **milliseconds** number: it is taken as microseconds a
 
 ### The uint256 / BIGNUMERIC precision limit
 
-[SDK_FEATURES.md](SDK_FEATURES.md#bigquery) states the rule. The arithmetic behind it: `BIGNUMERIC` defaults to precision 76.76, scale 38, so the maximum value is roughly `5.79e38`. `2^256-1` is roughly `1.16e77` and overflows — ERC-20 "infinite approval" sentinels hit this constantly. The `10^38 - 1` clamp in the example is a conservative round number (38 integer digits), not the exact ceiling.
+[SDK_FEATURES.md](SDK_FEATURES.md#bigquery) states the rule. The arithmetic behind it: `BIGNUMERIC` defaults to precision 76.76, scale 38, so the maximum value is roughly `5.79e38`. `2^256-1` is roughly `1.16e77` and overflows — ERC-20 "infinite approval" sentinels hit this constantly. The `10^38 - 1` threshold in the example is a conservative round number (38 integer digits), not the exact ceiling.
 
 Use two columns:
 
 ```
-amount      BIGNUMERIC NULLABLE  -> clampBignumeric(value)   // always populated, safe to SUM
-amount_raw  STRING     REQUIRED  -> value.toString()         // exact, lossless, the source of truth
+amount      BIGNUMERIC NULLABLE  -> asBignumeric(value)   // NULL when out of range
+amount_raw  STRING     REQUIRED  -> value.toString()      // exact, lossless, the source of truth
 ```
 
-Aggregate on `amount`; reconcile, audit and re-derive from `amount_raw`. This mirrors the ClickHouse rule of storing `uint256` as `String` — see [SCHEMA_GUIDE.md](SCHEMA_GUIDE.md#solidity-type--clickhouse-type-mapping).
+**Do not clamp an out-of-range value to the maximum.** Saturating makes distinct
+values compare equal and silently inflates every `SUM` over the column, and
+nothing downstream can tell a real maximum from a clamped one. Writing `NULL`
+instead keeps the column honest: `SUM` skips NULLs, so an overflow can be
+detected rather than absorbed.
+
+Because `SUM` skips them silently, check for overflow before trusting a total:
+
+```sql
+SELECT COUNTIF(amount IS NULL) AS unrepresentable, COUNT(*) AS rows
+FROM `proj.ds.transfers`
+WHERE block_number BETWEEN @from_block AND @to_block
+```
+
+If that count is non-zero, aggregate from `amount_raw` instead — it is exact —
+and accept the cast cost, or exclude the sentinel rows deliberately. ERC-20
+"infinite approval" values are the usual source and are rarely economically
+meaningful, but that is a judgement for the query to make explicitly, not for
+the write path to make silently. This mirrors the ClickHouse rule of storing
+`uint256` as `String` — see [SCHEMA_GUIDE.md](SCHEMA_GUIDE.md#solidity-type--clickhouse-type-mapping).
 
 ### Choosing the partition column
 
