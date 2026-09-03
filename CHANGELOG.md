@@ -7,6 +7,13 @@ detail lives in the auto-generated section of each
 
 ## Unreleased
 
+### New
+
+- `pipes-sdk` now covers BigQuery as a first-class sink: the GCP prerequisites,
+  the partitioning and clustering choices that are locked in the moment a table
+  is created, how forks and crashes are repaired, the target's error codes, and
+  how to query the resulting tables without running up a bill.
+
 ## August 28, 2026 — v1.0.0
 
 ### New

@@ -76,6 +76,8 @@ Error: Database 'pipes' does not exist
    docker exec clickhouse clickhouse-client --query "CREATE DATABASE IF NOT EXISTS pipes"
    ```
 
+**BigQuery sink:** failures look nothing like this — there is no local process and no connection string. Credentials come from Google application-default credentials, and the dataset must already exist (the target creates tables, never datasets). Configuration failures surface as `E2201`–`E2213` codes; see [BIGQUERY_TARGET.md](BIGQUERY_TARGET.md).
+
 ### Harmless: `Unknown table 'pipes.sync'` on First Run
 
 On a brand-new indexer, the SDK tries to read the sync table for resume state, fails (it doesn't exist yet), then creates it. **Ignore this error on first run.**

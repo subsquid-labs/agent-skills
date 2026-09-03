@@ -10,7 +10,7 @@ allowed-tools:
   - Grep
 metadata:
   author: subsquid
-  version: "1.5.0"
+  version: "1.6.0"
   category: core
 ---
 
@@ -54,7 +54,7 @@ Before scaffolding, say why Pipes is the right surface. Portal MCP is best for b
 
 **CLI:** `@subsquid/pipes-cli@1.0.0-beta.2`. For CLI-supported EVM and SVM projects, always use programmatic mode via `--config '{...}'` (a JSON string or a path to a config file) instead of writing the generated scaffold by hand. Tron, Bitcoin, and Hyperliquid have no CLI templates; use the reviewed manual patterns linked below.
 
-**npm dist-tags (verified 2026-08-26):** the SDK is in **1.0.0 beta**. `@subsquid/pipes@latest` and the CLI-generated `^1.0.0-beta.1` range install `1.0.0-beta.3`, while `@subsquid/pipes@beta` is `1.0.0-beta.4`. Pin beta.4 explicitly when using its Pub/Sub signals or lag metrics. The CLI trap remains: `@subsquid/pipes-cli@latest` is still the old `1.0.0-alpha.1`; keep the explicit `pipes-cli@1.0.0-beta.2` pin (or use its `beta` dist-tag). Recheck tags with `npm view @subsquid/pipes dist-tags --json` before changing pins.
+**npm dist-tags (verified 2026-09-03):** the SDK is in **1.0.0 beta**. `@subsquid/pipes@latest` is `1.0.0-beta.6` and `@subsquid/pipes@beta` is `1.0.0-beta.4`, so `latest` is ahead of `beta`; the CLI-generated `^1.0.0-beta.1` range therefore resolves to beta.6. Pin the exact version you tested against. The CLI trap remains: `@subsquid/pipes-cli@latest` is still the old `1.0.0-alpha.1`; keep the explicit `pipes-cli@1.0.0-beta.2` pin (or use its `beta` dist-tag). Recheck tags with `npm view @subsquid/pipes dist-tags --json` before changing pins.
 
 **Beta hard-renamed the SDK surface.** Current names include `evmEventDecoder` (was `evmDecoder`), `mockEvmPortalStream` (was `evmPortalMockStream`), `chunkForInsert` (was `batchForInsert`/`chunk`), and `add*Request` query-builder methods (for example, `addLogRequest` and `addInstructionRequest`). The `evmPortalSource`/`solanaPortalSource`/`hyperliquidFillsPortalSource` aliases are gone; only the `*PortalStream` names exist. Transform a raw query with `query.build().pipe(...)` and pass the result as `outputs`; source-level `.pipe()` is gone. Projects scaffolded by the old alpha CLI pinned the floating `"alpha"` dist-tag, which now resolves to `1.0.0-alpha.22`, so an old project can break on a fresh install. Use the full rename map in [SDK_FEATURES.md](references/SDK_FEATURES.md#renamed-in-the-beta-line), or pin the exact old SDK version temporarily.
 
@@ -84,7 +84,7 @@ See [TEMPLATES.md](references/TEMPLATES.md) for the full catalog: `erc20Transfer
 - Identify which contract emits the target events
 - **Check for proxy contracts** — #1 failure mode; ~6 of 9 real indexers need manual proxy resolution
 - Find the deployment block (for full history) or pick a recent start block (for faster tests)
-- Decide on sink (ClickHouse recommended, PostgreSQL with Drizzle, CSV)
+- Decide on sink (ClickHouse recommended, PostgreSQL with Drizzle, BigQuery — see [BIGQUERY_TARGET.md](references/BIGQUERY_TARGET.md), Parquet, or Pub/Sub)
 - Name the project
 
 ### Step 1: Inspect templates (optional)
@@ -181,6 +181,7 @@ Match the user's symptom to a pattern. Full diagnostics in [TROUBLESHOOTING.md](
 | Timestamps show 1970 | JS value precision doesn't match column precision | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-5c-timestamps-show-1970-dates) |
 | `heap out of memory` / killed | Batch too large | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-6-memory-issues) |
 | `Table already exists` / type mismatch | Schema drift | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-7-clickhouse-schema-issues) |
+| BigQuery target throws `E22xx` at startup | Missing dataset, schema drift, or partition mismatch | [BIGQUERY_TARGET.md](references/BIGQUERY_TARGET.md) |
 | `ZSTD_error_prefix_unknown` | Node v25+ zstd bug | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-9-nodejs-version-compatibility-issues) |
 | `evmDecoder is not a function` / import not found after reinstall | Floating `"alpha"` pin pulled the renamed beta-line API | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-11-renamed-sdk-exports-after-reinstall) |
 | Hyperliquid validate counts wildly off | SDK vs Portal block batching | [TROUBLESHOOTING.md](references/TROUBLESHOOTING.md#error-pattern-10-hyperliquid-validation--sdk-vs-portal-block-batching) |
@@ -198,7 +199,7 @@ The Pipes SDK is feature-rich — a handful of patterns cover 80% of use cases.
 - **Multi-output decoders**: run multiple named decoders in one pipeline via `outputs: { transfers: ..., swaps: ... }` — see [PATTERNS.md](references/PATTERNS.md#5-parallel-event-decoding-multi-output).
 - **SDK 1.0 features**: time-based ranges, `defineAbi`, typed errors, testing library — see [SDK_FEATURES.md](references/SDK_FEATURES.md).
 - **Tron & Bitcoin streams**: native query builders and portal streams for `tron-mainnet` and `bitcoin-mainnet` — see [SDK_FEATURES.md](references/SDK_FEATURES.md#tron-portal-streams).
-- **BigQuery, Parquet & Pub/Sub targets:** `bigqueryTarget` (partitioned tables, fork-safe DELETEs), `parquetTarget` (finalized-only rotating files), and `pubsubTarget` (BigQuery CDC rows or application-defined signals with fork handling). See [SDK_FEATURES.md](references/SDK_FEATURES.md#target-configuration).
+- **BigQuery, Parquet & Pub/Sub targets:** `bigqueryTarget` (partitioned tables, fork-safe DELETEs), `parquetTarget` (finalized-only rotating files), and `pubsubTarget` (BigQuery CDC rows or application-defined signals with fork handling). See [SDK_FEATURES.md](references/SDK_FEATURES.md#target-configuration); for BigQuery in depth, [BIGQUERY_TARGET.md](references/BIGQUERY_TARGET.md).
 - **Pipe-id-keyed cursors (alpha.15+)**: targets key sync state by the pipe `id`, so multiple pipes can share one database. Legacy ClickHouse cursors migrate automatically — see [SDK_FEATURES.md](references/SDK_FEATURES.md#cursor-keying--upgrading-to-alpha15).
 - **Beta rename map**: current names are `evmEventDecoder`, `evmPortalStream`, `solanaPortalStream`, `hyperliquidFillsPortalStream`, `mockEvmPortalStream`, `chunkForInsert`. Code from alpha-era scaffolds may still say `evmDecoder` or `evmPortalSource` (a removed alias of `evmPortalStream`) — see [SDK_FEATURES.md](references/SDK_FEATURES.md#renamed-in-the-beta-line) before "fixing" either spelling.
 - **Portal response cache**: `portalSqliteCache` (from `@subsquid/pipes/portal-cache/node`) caches Portal stream responses on disk (SQLite + zstd) to speed up re-runs and backfills over the same range; wire it via the stream's `cache` option — see [SDK_FEATURES.md](references/SDK_FEATURES.md).
@@ -256,6 +257,7 @@ Dashboard-grade ClickHouse patterns (time bucketing, conditional aggregation, pa
 | [TEMPLATES.md](references/TEMPLATES.md) | EVM/Solana/Hyperliquid template catalog and manual setup |
 | [ABI_GUIDE.md](references/ABI_GUIDE.md) | Fetching ABIs, `commonAbis`, proxy handling |
 | [SCHEMA_GUIDE.md](references/SCHEMA_GUIDE.md) | ClickHouse engine selection, ORDER BY, BigInt handling |
+| [BIGQUERY_TARGET.md](references/BIGQUERY_TARGET.md) | BigQuery sink: GCP setup, table/partition design, forks, error codes, query cost |
 | [HYPERLIQUID_GUIDE.md](references/HYPERLIQUID_GUIDE.md) | Hyperliquid fills: manual setup, coins, benchmarks |
 | [DEPLOYMENT.md](references/DEPLOYMENT.md) | Local Docker and ClickHouse Cloud deployment |
 | [SDK_FEATURES.md](references/SDK_FEATURES.md) | SDK 1.0 features, testing library, event field access |

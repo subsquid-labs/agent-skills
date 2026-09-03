@@ -380,6 +380,6 @@ CLI-scaffolded targets:
 (The alpha CLI's `memory` sink option no longer exists in the beta schema.)
 
 SDK-only targets (wire manually with `.pipeTo(...)` — see [SDK_FEATURES.md](SDK_FEATURES.md#target-configuration)):
-- **BigQuery** — `@subsquid/pipes/targets/bigquery`, auto-created partitioned tables, fork-safe DELETEs
+- **BigQuery** — `@subsquid/pipes/targets/bigquery`, auto-created partitioned tables, fork-safe DELETEs — full setup in [BIGQUERY_TARGET.md](BIGQUERY_TARGET.md)
 - **Parquet** — `@subsquid/pipes/targets/parquet`, finalized-only rotating files for DuckDB/Spark/Athena
 - **Google Pub/Sub:** `@subsquid/pipes/targets/pubsub`, BigQuery CDC rows or application-defined signal routes with explicit fork handling
